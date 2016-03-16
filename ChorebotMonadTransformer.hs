@@ -88,7 +88,7 @@ choreNeedsAssignment c = do
     -- than the interval.
     Just a' -> let diff = diffUTCTime now (assignmentDate a')
                    secInDay = 24 * 60 * 60
-                   intervalSeconds = fromIntegral $ (7 * choreInterval c) * secInDay
+                   intervalSeconds = fromIntegral $ (choreInterval c) * secInDay
                in return $ diff >= intervalSeconds
     Nothing -> return True
 
@@ -209,3 +209,14 @@ incSc = do
   st <- get
   let sc = sanityCheck st
   put $ st { sanityCheck = sc + 1 }
+
+testDistribute :: IO ()
+testDistribute = do
+  g <- newStdGen
+  t <- getCurrentTime
+  let (as, didHitLimit, _) = distribute galacticaProfiles galacticaChores galacticaAssignments t g
+  if didHitLimit
+    then putStrLn "Hit limit!"
+    else putStrLn "Didn't hit limit"
+  forM_ as $ \a -> do
+    putStrLn $ (choreTitle . assignmentChore $ a) ++ " -> " ++ (doerName . assignmentDoer $ a)

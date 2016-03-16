@@ -58,6 +58,7 @@ src/Chorebot/Distributor.hs | 448 +++++++++++++++++++++++++-------------------
 - Not optimized (String vs Text, laziness)
 - Not going into theory much
 - Way too much code! Pay attention to types more than implementation
+- Beware of bugs, I have merely type-checked, not actually run
 
 *** Github
 
@@ -88,9 +89,15 @@ data Chore = Chore { choreTitle      :: String
                    , choreCount      :: Int
                    } deriving (Show, Eq)
 
-dishFairy, emptyCompost :: Chore
-dishFairy    = Chore "Dish Fairy" 7 4 1
+dishFairy, emptyCompost, cleanRaptor, watchDradis, checkFTL :: Chore
+dishFairy    = Chore "Dish Fairy"    7 2 1
 emptyCompost = Chore "Empty compost" 7 2 1
+cleanRaptor  = Chore "Clean raptor"  7 7 1
+watchDradis  = Chore "Watch DRADIS"  1 4 1
+checkFTL     = Chore "Check FTL"    14 4 1
+
+galacticaChores :: [Chore]
+galacticaChores = [dishFairy, emptyCompost, cleanRaptor, watchDradis, checkFTL]
 #+end_src
 
 *** Doers
@@ -104,8 +111,10 @@ data Doer = Doer { doerName       :: String
                  } deriving (Eq, Show)
 
 lee, baltar :: Doer
-baltar = Doer "Gaius Baltar" [] []
-lee    = Doer "Lee Adama"    [] []
+baltar = Doer "Gaius Baltar" ["compost"] []
+lee    = Doer "Lee Adama"    []          ["dish"]
+bsgDoers :: [Doer]
+bsgDoers = [baltar, lee]
 #+end_src
 
 *** Doer permanent assignments and vetoes
@@ -144,6 +153,13 @@ data Assignment = Assignment { assignmentDoer       :: Doer,
 instance Ord Assignment where
   a1 `compare` a2 =
     (assignmentDate a1) `compare` (assignmentDate a2)
+
+galacticaAssignments :: [Assignment]
+galacticaAssignments =
+  [ Assignment lee    (parseDate "2016/03/09") dishFairy
+  , Assignment baltar (parseDate "2016/03/09") cleanRaptor
+  ]
+
 #+end_src
 
 *** Profiles
@@ -167,6 +183,11 @@ buildProfile assignments doer = Profile doer assignments''
 parseDate :: String -> UTCTime
 parseDate t = fromJust $ parseTimeM True defaultTimeLocale "%Y/%m/%d" t
 
+leeProf, baltarProf :: Profile
+leeProf    = buildProfile galacticaAssignments lee
+baltarProf = buildProfile galacticaAssignments baltar
+galacticaProfiles :: [Profile]
+galacticaProfiles = [leeProf, baltarProf]
 #+end_src
 
 *** Profiles: latestChores
@@ -220,6 +241,7 @@ Up front:
 module ChorebotNaive where
 
 import Data.List
+import Control.Monad
 import Data.Time
 import System.Random
 import ChorebotTypes
@@ -364,6 +386,7 @@ sortProfilesByDifficulty profiles gen now =
 hitSCLim :: [Profile] -> Int -> Bool
 hitSCLim profiles sc = sc >= (length profiles * 50)
 
+
 -- distribute all remaining chores
 distributeAll :: ([Chore], [Assignment], Int) -> [Profile] -> UTCTime -> ([Assignment], Bool)
 
@@ -373,8 +396,9 @@ distributeAll ([], acc, sc) profiles _now = (acc, hitSCLim profiles sc)
 -- otherwise
 distributeAll (chores, acc, sc) profiles now = distributeAll (chores', acc', sc') profiles now
   where
-    overLimit = hitSCLim profiles sc'
+    overLimit = hitSCLim profiles sc
     (chores', acc', sc') = foldl' (mkAssignment overLimit now) (chores, acc, sc) profiles
+
 
 mkAssignment ::
   -- went over sc limit; if so, "force assign"
@@ -412,8 +436,21 @@ mkAssignment overLimit now (c, a, s) profile =
          then (acc ++ cs, newAssignment:assignments, sc + 1)
          else mkAssignment' (cs, assignments, sc) (chore:acc)
 #+end_src
+**** Test
 
+#+begin_src haskell
+testDistribute :: IO ()
+testDistribute = do
+  g <- newStdGen
+  t <- getCurrentTime
+  let (as, didHitLimit, _) = distribute galacticaProfiles galacticaChores galacticaAssignments t g
+  if didHitLimit
+    then putStrLn "Hit limit!"
+    else putStrLn "Didn't hit limit"
+  forM_ as $ \a -> do
+    putStrLn $ (choreTitle . assignmentChore $ a) ++ " -> " ++ (doerName . assignmentDoer $ a)
 
+#+end_src
 *** Problems
 
 **** Lots of manual handling of state
@@ -422,13 +459,15 @@ mkAssignment overLimit now (c, a, s) profile =
 (chores''', gen') = sortChoresByDifficulty chores'' gen
 #+end_src
 
--fwarn-unused-binds is *very* helpful in catching bugs here, e.g.
+-fwarn-unused-binds (in -Wall) is *very* helpful in catching bugs here, e.g.
 
 #+BEGIN_EXAMPLE
-chorebot-naive.hs:42:6: Warning: Defined but not used: ‘chores'''’
+  chorebot-naive.hs:42:6: Warning: Defined but not used: ‘chores'''’
 #+END_EXAMPLE
 
 Most of my bugs were getting the tick marks wrong.
+
+Also run into <<loop>> exceptions.
 
 **** Repetitive/brittle type signatures
 
@@ -498,8 +537,11 @@ import ChorebotTypes
 
 #+begin_src haskell :tangle no
 sortChoresByDifficulty :: RandomGen g => [Chore] -> g -> ([Chore], g)
+
 sortProfilesByDifficulty :: RandomGen g => [Profile] -> g -> UTCTime -> ([Profile], g)
+
 distributePermanent :: ([Chore], [Assignment]) -> [Profile] -> UTCTime -> ([Chore], [Assignment])
+
 distributeAll :: ([Chore], [Assignment], Int) -> [Profile] -> UTCTime -> ([Assignment], Bool)
 #+end_src
 
@@ -617,7 +659,7 @@ choreNeedsAssignment c = do
     -- than the interval.
     Just a' -> let diff = diffUTCTime now (assignmentDate a')
                    secInDay = 24 * 60 * 60
-                   intervalSeconds = fromIntegral $ (7 * choreInterval c) * secInDay
+                   intervalSeconds = fromIntegral $ (choreInterval c) * secInDay
                in return $ diff >= intervalSeconds
     Nothing -> return True
 #+end_src
@@ -755,6 +797,37 @@ incSc = do
   let sc = sanityCheck st
   put $ st { sanityCheck = sc + 1 }
 #+end_src
+
+*** Test
+
+#+begin_src haskell
+testDistribute :: IO ()
+testDistribute = do
+  g <- newStdGen
+  t <- getCurrentTime
+  let (as, didHitLimit, _) = distribute galacticaProfiles galacticaChores galacticaAssignments t g
+  if didHitLimit
+    then putStrLn "Hit limit!"
+    else putStrLn "Didn't hit limit"
+  forM_ as $ \a -> do
+    putStrLn $ (choreTitle . assignmentChore $ a) ++ " -> " ++ (doerName . assignmentDoer $ a)
+
+#+end_src
+** Lots more to do!
+
+- Efficiency (Text, strictness, etc)
+
+- Generalized types
+
+- Handle errors (i.e. running over sanity check) with ExceptT
+
+- Set up for easier debugging (WriterT?)
+
+- Improve the actual algorithm: multiple (parallel?) iterations, score
+  fairness and pick best
+
+- use ReaderT's 'local' (for instance when sorting profiles for one
+  part of the algorithm)
 
 ** Resources
 

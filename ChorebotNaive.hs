@@ -1,6 +1,7 @@
 module ChorebotNaive where
 
 import Data.List
+import Control.Monad
 import Data.Time
 import System.Random
 import ChorebotTypes
@@ -113,6 +114,7 @@ sortProfilesByDifficulty profiles gen now =
 hitSCLim :: [Profile] -> Int -> Bool
 hitSCLim profiles sc = sc >= (length profiles * 50)
 
+
 -- distribute all remaining chores
 distributeAll :: ([Chore], [Assignment], Int) -> [Profile] -> UTCTime -> ([Assignment], Bool)
 
@@ -122,8 +124,9 @@ distributeAll ([], acc, sc) profiles _now = (acc, hitSCLim profiles sc)
 -- otherwise
 distributeAll (chores, acc, sc) profiles now = distributeAll (chores', acc', sc') profiles now
   where
-    overLimit = hitSCLim profiles sc'
+    overLimit = hitSCLim profiles sc
     (chores', acc', sc') = foldl' (mkAssignment overLimit now) (chores, acc, sc) profiles
+
 
 mkAssignment ::
   -- went over sc limit; if so, "force assign"
@@ -160,3 +163,14 @@ mkAssignment overLimit now (c, a, s) profile =
       in if shouldAssign
          then (acc ++ cs, newAssignment:assignments, sc + 1)
          else mkAssignment' (cs, assignments, sc) (chore:acc)
+
+testDistribute :: IO ()
+testDistribute = do
+  g <- newStdGen
+  t <- getCurrentTime
+  let (as, didHitLimit, _) = distribute galacticaProfiles galacticaChores galacticaAssignments t g
+  if didHitLimit
+    then putStrLn "Hit limit!"
+    else putStrLn "Didn't hit limit"
+  forM_ as $ \a -> do
+    putStrLn $ (choreTitle . assignmentChore $ a) ++ " -> " ++ (doerName . assignmentDoer $ a)

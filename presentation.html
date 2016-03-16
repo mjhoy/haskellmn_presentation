@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2016-03-16 Wed 14:05 -->
+<!-- 2016-03-16 Wed 18:57 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="viewport" content="width=device-width, initial-scale=1" />
 <title>building a chorebot monad transformer!</title>
@@ -220,7 +220,7 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgheadline53">1. presentation</a>
+<li><a href="#orgheadline56">1. presentation</a>
 <ul>
 <li><a href="#orgheadline1">1.1. Who am I?</a></li>
 <li><a href="#orgheadline7">1.2. Motivation: Chorebot</a>
@@ -245,31 +245,33 @@ for the JavaScript code in this tag.
 <li><a href="#orgheadline16">1.3.9. Profiles: difficultyPerDay</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline33">1.4. First implementation: Naive Haskell algorithm</a>
+<li><a href="#orgheadline34">1.4. First implementation: Naive Haskell algorithm</a>
 <ul>
 <li><a href="#orgheadline18">1.4.1. Header</a></li>
-<li><a href="#orgheadline27">1.4.2. Algorithm</a></li>
-<li><a href="#orgheadline32">1.4.3. Problems</a></li>
+<li><a href="#orgheadline28">1.4.2. Algorithm</a></li>
+<li><a href="#orgheadline33">1.4.3. Problems</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline51">1.5. Rewriting with Monad Transformers</a>
+<li><a href="#orgheadline53">1.5. Rewriting with Monad Transformers</a>
 <ul>
-<li><a href="#orgheadline34">1.5.1. Headers</a></li>
-<li><a href="#orgheadline38">1.5.2. Identifying behavior of the algorithm</a></li>
-<li><a href="#orgheadline43">1.5.3. The Chorebot monad</a></li>
-<li><a href="#orgheadline44">1.5.4. High level algorithm: distribute'</a></li>
-<li><a href="#orgheadline50">1.5.5. Low level implementation</a></li>
+<li><a href="#orgheadline35">1.5.1. Headers</a></li>
+<li><a href="#orgheadline39">1.5.2. Identifying behavior of the algorithm</a></li>
+<li><a href="#orgheadline44">1.5.3. The Chorebot monad</a></li>
+<li><a href="#orgheadline45">1.5.4. High level algorithm: distribute'</a></li>
+<li><a href="#orgheadline51">1.5.5. Low level implementation</a></li>
+<li><a href="#orgheadline52">1.5.6. Test</a></li>
 </ul>
 </li>
-<li><a href="#orgheadline52">1.6. Resources</a></li>
+<li><a href="#orgheadline54">1.6. Lots more to do!</a></li>
+<li><a href="#orgheadline55">1.7. Resources</a></li>
 </ul>
 </li>
 </ul>
 </div>
 </div>
 
-<div id="outline-container-orgheadline53" class="outline-2">
-<h2 id="orgheadline53"><span class="section-number-2">1</span> presentation</h2>
+<div id="outline-container-orgheadline56" class="outline-2">
+<h2 id="orgheadline56"><span class="section-number-2">1</span> presentation</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 The slides/code are available at:
@@ -368,6 +370,7 @@ src/Chorebot/Distributor.hs | 448 +++++++++++++++++++++++++-------------------
 <li>Not optimized (String vs Text, laziness)</li>
 <li>Not going into theory much</li>
 <li>Way too much code! Pay attention to types more than implementation</li>
+<li>Beware of bugs, I have merely type-checked, not actually run</li>
 </ul>
 </div>
 </div>
@@ -414,9 +417,15 @@ import Data.Time
                    , choreCount      :: Int
                    } deriving (Show, Eq)
 
-dishFairy, emptyCompost :: Chore
-dishFairy    = Chore "Dish Fairy" 7 4 1
+dishFairy, emptyCompost, cleanRaptor, watchDradis, checkFTL :: Chore
+dishFairy    = Chore "Dish Fairy"    7 2 1
 emptyCompost = Chore "Empty compost" 7 2 1
+cleanRaptor  = Chore "Clean raptor"  7 7 1
+watchDradis  = Chore "Watch DRADIS"  1 4 1
+checkFTL     = Chore "Check FTL"    14 4 1
+
+galacticaChores :: [Chore]
+galacticaChores = [dishFairy, emptyCompost, cleanRaptor, watchDradis, checkFTL]
 </pre>
 </div>
 </div>
@@ -435,8 +444,10 @@ data Doer = Doer { doerName       :: String
                  } deriving (Eq, Show)
 
 lee, baltar :: Doer
-baltar = Doer "Gaius Baltar" [] []
-lee    = Doer "Lee Adama"    [] []
+baltar = Doer "Gaius Baltar" ["compost"] []
+lee    = Doer "Lee Adama"    []          ["dish"]
+bsgDoers :: [Doer]
+bsgDoers = [baltar, lee]
 </pre>
 </div>
 </div>
@@ -488,6 +499,12 @@ Veto: bathroom, email
 instance Ord Assignment where
   a1 `compare` a2 =
     (assignmentDate a1) `compare` (assignmentDate a2)
+
+galacticaAssignments :: [Assignment]
+galacticaAssignments =
+  [ Assignment lee    (parseDate "2016/03/09") dishFairy
+  , Assignment baltar (parseDate "2016/03/09") cleanRaptor
+  ]
 </pre>
 </div>
 </div>
@@ -517,6 +534,12 @@ buildProfile assignments doer = Profile doer assignments''
 
 parseDate :: String -&gt; UTCTime
 parseDate t = fromJust $ parseTimeM True defaultTimeLocale "%Y/%m/%d" t
+
+leeProf, baltarProf :: Profile
+leeProf    = buildProfile galacticaAssignments lee
+baltarProf = buildProfile galacticaAssignments baltar
+galacticaProfiles :: [Profile]
+galacticaProfiles = [leeProf, baltarProf]
 </pre>
 </div>
 </div>
@@ -569,8 +592,8 @@ difficultyPerDay now (Profile _ assignments) =
 </div>
 </div>
 
-<div id="outline-container-orgheadline33" class="outline-3">
-<h3 id="orgheadline33"><span class="section-number-3">1.4</span> First implementation: Naive Haskell algorithm</h3>
+<div id="outline-container-orgheadline34" class="outline-3">
+<h3 id="orgheadline34"><span class="section-number-3">1.4</span> First implementation: Naive Haskell algorithm</h3>
 <div class="outline-text-3" id="text-1-4">
 <ul class="org-ul">
 <li>the "distribute" function will output new chore assignments</li>
@@ -589,6 +612,7 @@ Up front:
 <pre class="src src-haskell">module ChorebotNaive where
 
 import Data.List
+import Control.Monad
 import Data.Time
 import System.Random
 import ChorebotTypes
@@ -597,8 +621,8 @@ import ChorebotTypes
 </div>
 </div>
 
-<div id="outline-container-orgheadline27" class="outline-4">
-<h4 id="orgheadline27"><span class="section-number-4">1.4.2</span> Algorithm</h4>
+<div id="outline-container-orgheadline28" class="outline-4">
+<h4 id="orgheadline28"><span class="section-number-4">1.4.2</span> Algorithm</h4>
 <div class="outline-text-4" id="text-1-4-2">
 </div><ol class="org-ol"><li><a id="orgheadline19"></a>High level: distribute's type<br  /><div class="outline-text-5" id="text-1-4-2-1">
 <div class="org-src-container">
@@ -747,6 +771,7 @@ sortProfilesByDifficulty profiles gen now =
 <pre class="src src-haskell">hitSCLim :: [Profile] -&gt; Int -&gt; Bool
 hitSCLim profiles sc = sc &gt;= (length profiles * 50)
 
+
 -- distribute all remaining chores
 distributeAll :: ([Chore], [Assignment], Int) -&gt; [Profile] -&gt; UTCTime -&gt; ([Assignment], Bool)
 
@@ -756,8 +781,9 @@ distributeAll ([], acc, sc) profiles _now = (acc, hitSCLim profiles sc)
 -- otherwise
 distributeAll (chores, acc, sc) profiles now = distributeAll (chores', acc', sc') profiles now
   where
-    overLimit = hitSCLim profiles sc'
+    overLimit = hitSCLim profiles sc
     (chores', acc', sc') = foldl' (mkAssignment overLimit now) (chores, acc, sc) profiles
+
 
 mkAssignment ::
   -- went over sc limit; if so, "force assign"
@@ -796,14 +822,28 @@ mkAssignment overLimit now (c, a, s) profile =
          else mkAssignment' (cs, assignments, sc) (chore:acc)
 </pre>
 </div>
-</div></li></ol></li></ol>
+</div></li></ol></li>
+<li><a id="orgheadline27"></a>Test<br  /><div class="outline-text-5" id="text-1-4-2-4">
+<div class="org-src-container">
+
+<pre class="src src-haskell">testDistribute :: IO ()
+testDistribute = do
+  g &lt;- newStdGen
+  t &lt;- getCurrentTime
+  let (as, didHitLimit, _) = distribute galacticaProfiles galacticaChores galacticaAssignments t g
+  if didHitLimit
+    then putStrLn "Hit limit!"
+    else putStrLn "Didn't hit limit"
+  forM_ as $ \a -&gt; do
+    putStrLn $ (choreTitle . assignmentChore $ a) ++ " -&gt; " ++ (doerName . assignmentDoer $ a)
+</pre>
 </div>
-
-
-<div id="outline-container-orgheadline32" class="outline-4">
-<h4 id="orgheadline32"><span class="section-number-4">1.4.3</span> Problems</h4>
+</div></li></ol>
+</div>
+<div id="outline-container-orgheadline33" class="outline-4">
+<h4 id="orgheadline33"><span class="section-number-4">1.4.3</span> Problems</h4>
 <div class="outline-text-4" id="text-1-4-3">
-</div><ol class="org-ol"><li><a id="orgheadline28"></a>Lots of manual handling of state<br  /><div class="outline-text-5" id="text-1-4-3-1">
+</div><ol class="org-ol"><li><a id="orgheadline29"></a>Lots of manual handling of state<br  /><div class="outline-text-5" id="text-1-4-3-1">
 <div class="org-src-container">
 
 <pre class="src src-haskell">(chores''', gen') = sortChoresByDifficulty chores'' gen
@@ -811,19 +851,23 @@ mkAssignment overLimit now (c, a, s) profile =
 </div>
 
 <p>
--fwarn-unused-binds is <b>very</b> helpful in catching bugs here, e.g.
+-fwarn-unused-binds (in -Wall) is <b>very</b> helpful in catching bugs here, e.g.
 </p>
 
 <pre class="example">
-chorebot-naive.hs:42:6: Warning: Defined but not used: ‘chores'''’
+  chorebot-naive.hs:42:6: Warning: Defined but not used: ‘chores'''’
 </pre>
 
 <p>
 Most of my bugs were getting the tick marks wrong.
 </p>
+
+<p>
+Also run into <a id="orgtarget1"></a> exceptions.
+</p>
 </div></li>
 
-<li><a id="orgheadline29"></a>Repetitive/brittle type signatures<br  /><div class="outline-text-5" id="text-1-4-3-2">
+<li><a id="orgheadline30"></a>Repetitive/brittle type signatures<br  /><div class="outline-text-5" id="text-1-4-3-2">
 <div class="org-src-container">
 
 <pre class="src src-haskell">distributeAll :: ([Chore], [Assignment], Int) -&gt; [Profile] -&gt; UTCTime -&gt; ([Assignment], Bool)
@@ -847,7 +891,7 @@ distributeAll :: DistState -&gt; [Profile] -&gt; UTCTime -&gt; ([Assignment], Bo
 </div>
 </div></li>
 
-<li><a id="orgheadline30"></a>Refactoring is harder than it should be<br  /><div class="outline-text-5" id="text-1-4-3-3">
+<li><a id="orgheadline31"></a>Refactoring is harder than it should be<br  /><div class="outline-text-5" id="text-1-4-3-3">
 <p>
 Pulling out functions mean passing all of the current algorithm state
 </p>
@@ -865,7 +909,7 @@ types for me.
 </p>
 </div></li>
 
-<li><a id="orgheadline31"></a>Unrelated: record names<br  /><div class="outline-text-5" id="text-1-4-3-4">
+<li><a id="orgheadline32"></a>Unrelated: record names<br  /><div class="outline-text-5" id="text-1-4-3-4">
 <p>
 Bad idea:
 </p>
@@ -881,13 +925,13 @@ Bad idea:
 </div>
 </div>
 
-<div id="outline-container-orgheadline51" class="outline-3">
-<h3 id="orgheadline51"><span class="section-number-3">1.5</span> Rewriting with Monad Transformers</h3>
+<div id="outline-container-orgheadline53" class="outline-3">
+<h3 id="orgheadline53"><span class="section-number-3">1.5</span> Rewriting with Monad Transformers</h3>
 <div class="outline-text-3" id="text-1-5">
 </div>
 
-<div id="outline-container-orgheadline34" class="outline-4">
-<h4 id="orgheadline34"><span class="section-number-4">1.5.1</span> Headers</h4>
+<div id="outline-container-orgheadline35" class="outline-4">
+<h4 id="orgheadline35"><span class="section-number-4">1.5.1</span> Headers</h4>
 <div class="outline-text-4" id="text-1-5-1">
 <div class="org-src-container">
 
@@ -912,20 +956,23 @@ import ChorebotTypes
 </div>
 </div>
 
-<div id="outline-container-orgheadline38" class="outline-4">
-<h4 id="orgheadline38"><span class="section-number-4">1.5.2</span> Identifying behavior of the algorithm</h4>
+<div id="outline-container-orgheadline39" class="outline-4">
+<h4 id="orgheadline39"><span class="section-number-4">1.5.2</span> Identifying behavior of the algorithm</h4>
 <div class="outline-text-4" id="text-1-5-2">
 <div class="org-src-container">
 
 <pre class="src src-haskell">sortChoresByDifficulty :: RandomGen g =&gt; [Chore] -&gt; g -&gt; ([Chore], g)
+
 sortProfilesByDifficulty :: RandomGen g =&gt; [Profile] -&gt; g -&gt; UTCTime -&gt; ([Profile], g)
+
 distributePermanent :: ([Chore], [Assignment]) -&gt; [Profile] -&gt; UTCTime -&gt; ([Chore], [Assignment])
+
 distributeAll :: ([Chore], [Assignment], Int) -&gt; [Profile] -&gt; UTCTime -&gt; ([Assignment], Bool)
 </pre>
 </div>
 </div>
 
-<ol class="org-ol"><li><a id="orgheadline35"></a>State (read/write)<br  /><div class="outline-text-5" id="text-1-5-2-1">
+<ol class="org-ol"><li><a id="orgheadline36"></a>State (read/write)<br  /><div class="outline-text-5" id="text-1-5-2-1">
 <div class="org-src-container">
 
 <pre class="src src-haskell">data CState = CState
@@ -937,7 +984,7 @@ distributeAll :: ([Chore], [Assignment], Int) -&gt; [Profile] -&gt; UTCTime -&gt
 </div>
 </div></li>
 
-<li><a id="orgheadline36"></a>Configuration (read-only)<br  /><div class="outline-text-5" id="text-1-5-2-2">
+<li><a id="orgheadline37"></a>Configuration (read-only)<br  /><div class="outline-text-5" id="text-1-5-2-2">
 <div class="org-src-container">
 
 <pre class="src src-haskell">data CConf = CConf { confTime :: UTCTime
@@ -949,7 +996,7 @@ distributeAll :: ([Chore], [Assignment], Int) -&gt; [Profile] -&gt; UTCTime -&gt
 </div>
 </div></li>
 
-<li><a id="orgheadline37"></a>Randomness<br  /><div class="outline-text-5" id="text-1-5-2-3">
+<li><a id="orgheadline38"></a>Randomness<br  /><div class="outline-text-5" id="text-1-5-2-3">
 <div class="org-src-container">
 
 <pre class="src src-haskell">sortChoresByDifficulty :: RandomGen g =&gt; [Chore] -&gt; g -&gt; ([Chore], g)
@@ -958,10 +1005,10 @@ distributeAll :: ([Chore], [Assignment], Int) -&gt; [Profile] -&gt; UTCTime -&gt
 </div></li></ol>
 </div>
 
-<div id="outline-container-orgheadline43" class="outline-4">
-<h4 id="orgheadline43"><span class="section-number-4">1.5.3</span> The Chorebot monad</h4>
+<div id="outline-container-orgheadline44" class="outline-4">
+<h4 id="orgheadline44"><span class="section-number-4">1.5.3</span> The Chorebot monad</h4>
 <div class="outline-text-4" id="text-1-5-3">
-</div><ol class="org-ol"><li><a id="orgheadline39"></a>Monad transformer composition<br  /><div class="outline-text-5" id="text-1-5-3-1">
+</div><ol class="org-ol"><li><a id="orgheadline40"></a>Monad transformer composition<br  /><div class="outline-text-5" id="text-1-5-3-1">
 <div class="org-src-container">
 
 <pre class="src src-haskell">newtype C a = C { _runC :: RandT StdGen (ReaderT CConf (State CState)) a }
@@ -973,7 +1020,7 @@ distributeAll :: ([Chore], [Assignment], Int) -&gt; [Profile] -&gt; UTCTime -&gt
 </div>
 </div></li>
 
-<li><a id="orgheadline40"></a>runC<br  /><div class="outline-text-5" id="text-1-5-3-2">
+<li><a id="orgheadline41"></a>runC<br  /><div class="outline-text-5" id="text-1-5-3-2">
 <div class="org-src-container">
 
 <pre class="src src-haskell">runC :: C a -&gt; CConf -&gt; CState -&gt; StdGen -&gt; ((a, StdGen), CState)
@@ -982,7 +1029,7 @@ runC (C k) conf st gen = runIdentity (runStateT (runReaderT (runRandT k gen) con
 </div>
 </div></li>
 
-<li><a id="orgheadline41"></a>reader helpers<br  /><div class="outline-text-5" id="text-1-5-3-3">
+<li><a id="orgheadline42"></a>reader helpers<br  /><div class="outline-text-5" id="text-1-5-3-3">
 <div class="org-src-container">
 
 <pre class="src src-haskell">askTime             :: C UTCTime
@@ -998,7 +1045,7 @@ askSanityCheckLimit = liftM confSanityCheckLimit ask
 </div>
 </div></li>
 
-<li><a id="orgheadline42"></a>Rewriting "distribute" to use the monad<br  /><div class="outline-text-5" id="text-1-5-3-4">
+<li><a id="orgheadline43"></a>Rewriting "distribute" to use the monad<br  /><div class="outline-text-5" id="text-1-5-3-4">
 <div class="org-src-container">
 
 <pre class="src src-haskell">distribute :: [Profile] -&gt; [Chore] -&gt; [Assignment] -&gt; UTCTime -&gt; StdGen -&gt; ([Assignment], Bool, StdGen)
@@ -1017,8 +1064,8 @@ distribute profiles chores assignments now gen =
 </div></li></ol>
 </div>
 
-<div id="outline-container-orgheadline44" class="outline-4">
-<h4 id="orgheadline44"><span class="section-number-4">1.5.4</span> High level algorithm: distribute'</h4>
+<div id="outline-container-orgheadline45" class="outline-4">
+<h4 id="orgheadline45"><span class="section-number-4">1.5.4</span> High level algorithm: distribute'</h4>
 <div class="outline-text-4" id="text-1-5-4">
 <div class="org-src-container">
 
@@ -1036,10 +1083,10 @@ distribute' = do
 </div>
 </div>
 
-<div id="outline-container-orgheadline50" class="outline-4">
-<h4 id="orgheadline50"><span class="section-number-4">1.5.5</span> Low level implementation</h4>
+<div id="outline-container-orgheadline51" class="outline-4">
+<h4 id="orgheadline51"><span class="section-number-4">1.5.5</span> Low level implementation</h4>
 <div class="outline-text-4" id="text-1-5-5">
-</div><ol class="org-ol"><li><a id="orgheadline45"></a>removeUneccessaryChores<br  /><div class="outline-text-5" id="text-1-5-5-1">
+</div><ol class="org-ol"><li><a id="orgheadline46"></a>removeUneccessaryChores<br  /><div class="outline-text-5" id="text-1-5-5-1">
 <div class="org-src-container">
 
 <pre class="src src-haskell">removeUneccessaryChores :: C ()
@@ -1062,14 +1109,14 @@ choreNeedsAssignment c = do
     -- than the interval.
     Just a' -&gt; let diff = diffUTCTime now (assignmentDate a')
                    secInDay = 24 * 60 * 60
-                   intervalSeconds = fromIntegral $ (7 * choreInterval c) * secInDay
+                   intervalSeconds = fromIntegral $ (choreInterval c) * secInDay
                in return $ diff &gt;= intervalSeconds
     Nothing -&gt; return True
 </pre>
 </div>
 </div></li>
 
-<li><a id="orgheadline46"></a>distributePermanent<br  /><div class="outline-text-5" id="text-1-5-5-2">
+<li><a id="orgheadline47"></a>distributePermanent<br  /><div class="outline-text-5" id="text-1-5-5-2">
 <div class="org-src-container">
 
 <pre class="src src-haskell">distributePermanent :: C ()
@@ -1102,7 +1149,7 @@ assignChore prof chore = do
 </div>
 </div></li>
 
-<li><a id="orgheadline47"></a>sortChores<br  /><div class="outline-text-5" id="text-1-5-5-3">
+<li><a id="orgheadline48"></a>sortChores<br  /><div class="outline-text-5" id="text-1-5-5-3">
 <div class="org-src-container">
 
 <pre class="src src-haskell">-- Sort the pending chores by difficulty, hardest are first. Chores of
@@ -1117,7 +1164,7 @@ sortChores = do
 </div>
 </div></li>
 
-<li><a id="orgheadline48"></a>random sorting<br  /><div class="outline-text-5" id="text-1-5-5-4">
+<li><a id="orgheadline49"></a>random sorting<br  /><div class="outline-text-5" id="text-1-5-5-4">
 <div class="org-src-container">
 
 <pre class="src src-haskell">randomSequence :: Int -&gt; C [Int]
@@ -1140,7 +1187,7 @@ randomishSort as fn = do
 </div>
 </div></li>
 
-<li><a id="orgheadline49"></a>distributeAll<br  /><div class="outline-text-5" id="text-1-5-5-5">
+<li><a id="orgheadline50"></a>distributeAll<br  /><div class="outline-text-5" id="text-1-5-5-5">
 <div class="org-src-container">
 
 <pre class="src src-haskell">distributeAll :: C Bool
@@ -1211,11 +1258,51 @@ incSc = do
 </div>
 </div></li></ol>
 </div>
+
+<div id="outline-container-orgheadline52" class="outline-4">
+<h4 id="orgheadline52"><span class="section-number-4">1.5.6</span> Test</h4>
+<div class="outline-text-4" id="text-1-5-6">
+<div class="org-src-container">
+
+<pre class="src src-haskell">testDistribute :: IO ()
+testDistribute = do
+  g &lt;- newStdGen
+  t &lt;- getCurrentTime
+  let (as, didHitLimit, _) = distribute galacticaProfiles galacticaChores galacticaAssignments t g
+  if didHitLimit
+    then putStrLn "Hit limit!"
+    else putStrLn "Didn't hit limit"
+  forM_ as $ \a -&gt; do
+    putStrLn $ (choreTitle . assignmentChore $ a) ++ " -&gt; " ++ (doerName . assignmentDoer $ a)
+</pre>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-orgheadline54" class="outline-3">
+<h3 id="orgheadline54"><span class="section-number-3">1.6</span> Lots more to do!</h3>
+<div class="outline-text-3" id="text-1-6">
+<ul class="org-ul">
+<li>Efficiency (Text, strictness, etc)</li>
+
+<li>Generalized types</li>
+
+<li>Handle errors (i.e. running over sanity check) with ExceptT</li>
+
+<li>Set up for easier debugging (WriterT?)</li>
+
+<li>Improve the actual algorithm: multiple (parallel?) iterations, score
+fairness and pick best</li>
+
+<li>use ReaderT's 'local' (for instance when sorting profiles for one
+part of the algorithm)</li>
+</ul>
+</div>
 </div>
 
-<div id="outline-container-orgheadline52" class="outline-3">
-<h3 id="orgheadline52"><span class="section-number-3">1.6</span> Resources</h3>
-<div class="outline-text-3" id="text-1-6">
+<div id="outline-container-orgheadline55" class="outline-3">
+<h3 id="orgheadline55"><span class="section-number-3">1.7</span> Resources</h3>
+<div class="outline-text-3" id="text-1-7">
 <p>
 Monad Transformers Step by Step:
 </p>
@@ -1259,7 +1346,7 @@ Brian Hurt - Wrangling Monad Transformer Stacks
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Michael Hoy &lt;mjh@mjhoy.com&gt;</p>
-<p class="date">Created: 2016-03-16 Wed 14:05</p>
+<p class="date">Created: 2016-03-16 Wed 18:57</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

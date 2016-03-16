@@ -11,9 +11,15 @@ data Chore = Chore { choreTitle      :: String
                    , choreCount      :: Int
                    } deriving (Show, Eq)
 
-dishFairy, emptyCompost :: Chore
-dishFairy    = Chore "Dish Fairy" 7 4 1
+dishFairy, emptyCompost, cleanRaptor, watchDradis, checkFTL :: Chore
+dishFairy    = Chore "Dish Fairy"    7 2 1
 emptyCompost = Chore "Empty compost" 7 2 1
+cleanRaptor  = Chore "Clean raptor"  7 7 1
+watchDradis  = Chore "Watch DRADIS"  1 4 1
+checkFTL     = Chore "Check FTL"    14 4 1
+
+galacticaChores :: [Chore]
+galacticaChores = [dishFairy, emptyCompost, cleanRaptor, watchDradis, checkFTL]
 
 type Pattern = String
 
@@ -23,8 +29,10 @@ data Doer = Doer { doerName       :: String
                  } deriving (Eq, Show)
 
 lee, baltar :: Doer
-baltar = Doer "Gaius Baltar" [] []
-lee    = Doer "Lee Adama"    [] []
+baltar = Doer "Gaius Baltar" ["compost"] []
+lee    = Doer "Lee Adama"    []          ["dish"]
+bsgDoers :: [Doer]
+bsgDoers = [baltar, lee]
 
 isPermanentlyAssigned :: Doer -> Chore -> Bool
 isPermanentlyAssigned doer chore =
@@ -48,6 +56,12 @@ instance Ord Assignment where
   a1 `compare` a2 =
     (assignmentDate a1) `compare` (assignmentDate a2)
 
+galacticaAssignments :: [Assignment]
+galacticaAssignments =
+  [ Assignment lee    (parseDate "2016/03/09") dishFairy
+  , Assignment baltar (parseDate "2016/03/09") cleanRaptor
+  ]
+
 data Profile = Profile { profileDoer        :: Doer
                        , profileAssignments :: [Assignment]
                        } deriving (Eq, Show)
@@ -63,6 +77,12 @@ buildProfile assignments doer = Profile doer assignments''
 
 parseDate :: String -> UTCTime
 parseDate t = fromJust $ parseTimeM True defaultTimeLocale "%Y/%m/%d" t
+
+leeProf, baltarProf :: Profile
+leeProf    = buildProfile galacticaAssignments lee
+baltarProf = buildProfile galacticaAssignments baltar
+galacticaProfiles :: [Profile]
+galacticaProfiles = [leeProf, baltarProf]
 
 -- Find the chores with the most recent date
 latestChores :: Profile -> [Chore]
