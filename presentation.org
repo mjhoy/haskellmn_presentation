@@ -1,0 +1,782 @@
+#+title: building a chorebot monad transformer!
+#+author: Michael Hoy <mjh@mjhoy.com>
+#+INFOJS_OPT: view:info toc:nil
+
+* presentation
+
+The slides/code are available at:
+
+https://github.com/mjhoy/haskellmn_presentation
+
+** Who am I?
+
+Michael Hoy
+
+(but call me Mikey)
+
+twitter/github -> mjhoy
+
+mjh@mjhoy.con
+
+Day job: \.(php|rb|js)
+
+** Motivation: Chorebot
+*** What is it?
+
+A program that divvies up chores with my housemates and sends out
+emails.
+
+*** That's it?
+
+- Big house, 8 people, lots of chores
+- Hard for humans to redistribute fairly and quickly
+- Random BSG quotes to improve morale
+
+[[./cylon.jpg]]
+
+*** The point of this presentation
+
+- Wrote Chorebot once in Ruby, again in Haskell, yet again in Haskell
+  with Monad Transformers
+
+- Why do I care about transformers? How did I include them? What's the
+  effect on future refactoring?
+
+- Beginner perspective
+
+#+BEGIN_SRC text
+ba8b123f use monad transformer for the distribute algo
+
+2 files changed, 261 insertions(+), 191 deletions(-)
+chorebot.cabal              |   4 +
+src/Chorebot/Distributor.hs | 448 +++++++++++++++++++++++++-------------------
+#+END_SRC
+
+*** Caveats
+
+- Haskell beginner
+- Not optimized (String vs Text, laziness)
+- Not going into theory much
+- Way too much code! Pay attention to types more than implementation
+
+*** Github
+
+https://github.com/mjhoy/chorebot_hs
+
+** Data types
+:PROPERTIES:
+:tangle: ChorebotTypes.hs
+:END:
+
+*** Header
+
+#+begin_src haskell
+module ChorebotTypes where
+
+import Text.Regex (matchRegex, mkRegexWithOpts)
+import Data.Maybe (isJust, fromJust)
+import Data.List
+import Data.Time
+#+end_src
+
+*** Chores
+
+#+begin_src haskell
+data Chore = Chore { choreTitle      :: String
+                   , choreInterval   :: Int
+                   , choreDifficulty :: Int
+                   , choreCount      :: Int
+                   } deriving (Show, Eq)
+
+dishFairy, emptyCompost :: Chore
+dishFairy    = Chore "Dish Fairy" 7 4 1
+emptyCompost = Chore "Empty compost" 7 2 1
+#+end_src
+
+*** Doers
+
+#+begin_src haskell
+type Pattern = String
+
+data Doer = Doer { doerName       :: String
+                 , doerVetoes     :: [Pattern]
+                 , doerPermanents :: [Pattern]
+                 } deriving (Eq, Show)
+
+lee, baltar :: Doer
+baltar = Doer "Gaius Baltar" [] []
+lee    = Doer "Lee Adama"    [] []
+#+end_src
+
+*** Doer permanent assignments and vetoes
+
+#+begin_src haskell
+isPermanentlyAssigned :: Doer -> Chore -> Bool
+isPermanentlyAssigned doer chore =
+  any (matchChore chore) (doerPermanents doer)
+
+hasVetoed :: Doer -> Chore -> Bool
+hasVetoed doer chore =
+  any (matchChore chore) (doerVetoes doer)
+
+matchChore :: Chore -> Pattern -> Bool
+matchChore chore pat =
+  let pat' = mkRegexWithOpts pat True False -- case insensitive
+  in isJust $ matchRegex pat' (choreTitle chore)
+#+end_src
+
+*** Example doer file that gets parsed (not super relevant)
+
+#+BEGIN_EXAMPLE
+Mikey Hoy <mjh@mjhoy.com>
+Assigned: sweep
+Veto: bathroom, email
+#+END_EXAMPLE
+
+*** Assignments
+
+#+begin_src haskell
+data Assignment = Assignment { assignmentDoer       :: Doer,
+                               assignmentDate       :: UTCTime,
+                               assignmentChore      :: Chore
+                             } deriving (Show, Eq)
+
+instance Ord Assignment where
+  a1 `compare` a2 =
+    (assignmentDate a1) `compare` (assignmentDate a2)
+#+end_src
+
+*** Profiles
+
+Think of as doer plus history of doing chores
+
+#+begin_src haskell
+data Profile = Profile { profileDoer        :: Doer
+                       , profileAssignments :: [Assignment]
+                       } deriving (Eq, Show)
+
+buildProfile :: [Assignment] -> -- List of all/any chore assignments
+                Doer ->
+                Profile
+buildProfile assignments doer = Profile doer assignments''
+  where
+    assignments'' = sort assignments'
+    assignments' = filter byDoer assignments
+    byDoer a = (assignmentDoer a) == doer
+
+parseDate :: String -> UTCTime
+parseDate t = fromJust $ parseTimeM True defaultTimeLocale "%Y/%m/%d" t
+
+#+end_src
+
+*** Profiles: latestChores
+
+#+begin_src haskell
+-- Find the chores with the most recent date
+latestChores :: Profile -> [Chore]
+latestChores (Profile _d []) = []
+latestChores (Profile _d as@(a:_)) =
+    let latest = foldl' lateDate (assignmentDate a) as
+    in map assignmentChore $ filter (\a' -> (assignmentDate a') == latest) as
+  where
+    lateDate :: UTCTime -> Assignment -> UTCTime
+    lateDate t a' = let t' = assignmentDate a'
+                    in if t' > t then t' else t
+#+end_src
+
+*** Profiles: difficultyPerDay
+
+#+begin_src haskell
+difficultyPerDay :: UTCTime ->  -- the current time
+                    Profile ->
+                    Double
+difficultyPerDay now (Profile _ assignments) =
+  -- get the earliest date in `as'
+    let earliest  = foldl' earlyDate now assignments
+        diffTime  = max secInDay $ round $ diffUTCTime now earliest
+        secInDay = 24 * 60 * 60
+        daysSince :: Double
+        daysSince = fromIntegral diffTime / fromIntegral secInDay
+        totalDifficulty = foldl' (\d a -> d + (choreDifficulty $ assignmentChore a)) 0 assignments
+    in fromIntegral totalDifficulty / daysSince
+  where
+    earlyDate :: UTCTime -> Assignment -> UTCTime
+    earlyDate t a = let t' = assignmentDate a
+                    in if t' < t then t' else t
+#+end_src
+
+** First implementation: Naive Haskell algorithm
+:PROPERTIES:
+:tangle: ChorebotNaive.hs
+:END:
+
+- the "distribute" function will output new chore assignments
+
+*** Header
+
+Up front:
+
+#+begin_src haskell
+module ChorebotNaive where
+
+import Data.List
+import Data.Time
+import System.Random
+import ChorebotTypes
+#+end_src
+
+*** Algorithm
+
+**** High level: distribute's type
+
+#+begin_src haskell
+distribute :: RandomGen g =>
+
+              -- list of profiles to assign chores to
+              [Profile] ->
+
+              -- list of possible chores to assign
+              [Chore] ->
+
+              -- list of past chore assignments
+              [Assignment] ->
+
+              -- current time
+              UTCTime ->
+
+              -- random number generator
+              g ->
+
+              -- a list of new assignments plus whether any chores
+              -- were force assigned, plus a new random gen
+              ([Assignment], Bool, g)
+#+end_src
+
+**** High level: distribute's implementation
+
+#+begin_src haskell
+distribute profiles chores pastAssignments now gen = (finalAssignments, didForceAssign, finalGen)
+  where
+    -- past assignments sorted most recent first
+    pastAssignments' = reverse $ sort pastAssignments
+
+    -- step 1: remove chores assigned previously within their interval
+    chores' = filter (choreNeedsAssignment pastAssignments' now) chores
+
+    -- step 2: distribute permanent chores
+    (chores'', newAssignments) = distributePermanent (chores',[]) profiles now
+
+    -- step 3: sort chores by difficulty, hardest first
+    (chores''', gen') = sortChoresByDifficulty chores'' gen
+
+    -- step 4: sort profiles in order of least "difficultyPerDay" first
+    (profiles', gen'') = sortProfilesByDifficulty profiles gen' now
+
+    -- step 5: distribute the rest of the chores
+    (newAssignments', didForceAssign) = distributeAll (chores''', newAssignments, 0) profiles' now
+
+    finalAssignments = newAssignments'
+    finalGen = gen''
+#+end_src
+
+**** Low level implementation
+
+***** choreNeedsAssignment
+
+#+begin_src haskell
+-- does a chore need doing?
+choreNeedsAssignment :: [Assignment] -> UTCTime -> Chore -> Bool
+choreNeedsAssignment pastAssignments now c =
+  let prevAssignment = find (\a' -> c == (assignmentChore a')) pastAssignments
+  in case prevAssignment of
+
+    -- a' is the previous assignment of chore c.
+    --
+    -- calculate whether the time since last defined is greater
+    -- than the interval.
+    Just a' -> let diff = diffUTCTime now (assignmentDate a')
+                   secInDay = 24 * 60 * 60
+                   intervalSeconds = fromIntegral $ (choreInterval c) * secInDay
+               in diff >= intervalSeconds
+
+    -- chore c has never been assigned before, so we should
+    -- definitely assign it.
+    Nothing -> True
+#+end_src
+
+***** distributePermanent
+
+#+begin_src haskell
+-- assign all permanent chores
+distributePermanent :: ([Chore], [Assignment]) -> [Profile] -> UTCTime -> ([Chore], [Assignment])
+distributePermanent (chores, assignments) profiles now = (chores', assignments')
+  where
+    (chores', assignments') =
+      foldl' assignPermForDoer (chores, assignments) (map profileDoer profiles)
+
+    assignPermForDoer ([], as) _doer = ([], as)
+    assignPermForDoer (cs, as) doer  =  (cs \\ assignedChores,
+                                         as ++ (map (Assignment doer now) assignedChores))
+      where
+        assignedChores = filter (isPermanentlyAssigned doer) cs
+#+end_src
+
+***** sortChoresByDifficulty
+
+#+begin_src haskell
+randomNRs :: RandomGen g => Int -> g -> ([Int], g)
+randomNRs n g = foldl' fn ([], g) (take n $ repeat ())
+  where fn (acc,g') _ = let (a, g'') = randomR (1,10000) g'
+                        in (a:acc, g'')
+
+-- most difficult chores first; randomize chores with equal
+-- difficulties
+sortChoresByDifficulty :: RandomGen g => [Chore] -> g -> ([Chore], g)
+sortChoresByDifficulty chores gen =
+  let (rs, gen') = randomNRs (length chores) gen
+      cRandomWeight = zip rs chores
+      sortFn :: (Int, Chore) -> (Int, Chore) -> Ordering
+      sortFn (r1, c1) (r2, c2) = case choreDifficulty c1 `compare` choreDifficulty c2 of
+        EQ -> r1 `compare` r2
+        a  -> a
+  in ((map snd $ reverse $ sortBy sortFn cRandomWeight), gen')
+#+end_src
+
+***** sortProfilesByDifficulty
+
+#+begin_src haskell
+-- profiles with the least "difficultyPerDay" first; randomize when
+-- equal.
+sortProfilesByDifficulty :: RandomGen g => [Profile] -> g -> UTCTime -> ([Profile], g)
+sortProfilesByDifficulty profiles gen now =
+  let (rs, gen') = randomNRs (length profiles) gen
+      pRandomWeight = zip rs profiles
+      sortFn :: (Int, Profile) -> (Int, Profile) -> Ordering
+      sortFn (r1, p1) (r2, p2) = case difficultyPerDay now p1 `compare` difficultyPerDay now p2 of
+        EQ -> r1 `compare` r2
+        a -> a
+  in ((map snd $ sortBy sortFn pRandomWeight), gen')
+#+end_src
+
+***** distributeAll
+
+#+begin_src haskell
+hitSCLim :: [Profile] -> Int -> Bool
+hitSCLim profiles sc = sc >= (length profiles * 50)
+
+-- distribute all remaining chores
+distributeAll :: ([Chore], [Assignment], Int) -> [Profile] -> UTCTime -> ([Assignment], Bool)
+
+-- no more pending chores: return assignments.
+distributeAll ([], acc, sc) profiles _now = (acc, hitSCLim profiles sc)
+
+-- otherwise
+distributeAll (chores, acc, sc) profiles now = distributeAll (chores', acc', sc') profiles now
+  where
+    overLimit = hitSCLim profiles sc'
+    (chores', acc', sc') = foldl' (mkAssignment overLimit now) (chores, acc, sc) profiles
+
+mkAssignment ::
+  -- went over sc limit; if so, "force assign"
+  Bool ->
+
+  -- current time
+  UTCTime ->
+
+  -- state
+  ([Chore], [Assignment], Int) ->
+
+  -- profile to assign to
+  Profile ->
+
+  -- new state
+  ([Chore], [Assignment], Int)
+
+mkAssignment overLimit now (c, a, s) profile =
+    mkAssignment' (c, a, s) []
+  where
+    mkAssignment' :: ([Chore], [Assignment], Int) -> [Chore] -> ([Chore], [Assignment], Int)
+    mkAssignment' ([], assignments, sc) acc = (acc, assignments, sc + 1)
+    mkAssignment' (chore:cs, assignments, sc) acc =
+      let doer = profileDoer profile
+          newAssignment = Assignment doer now chore
+
+          -- should we make this assignment?
+          shouldAssign = or [
+            overLimit,
+            (and [(not $ hasVetoed doer chore),
+                  (not $ elem chore $ map assignmentChore $ filter ((== doer) . assignmentDoer) assignments),
+                  (not $ elem chore $ latestChores profile)])
+            ]
+      in if shouldAssign
+         then (acc ++ cs, newAssignment:assignments, sc + 1)
+         else mkAssignment' (cs, assignments, sc) (chore:acc)
+#+end_src
+
+
+*** Problems
+
+**** Lots of manual handling of state
+
+#+begin_src haskell :tangle no
+(chores''', gen') = sortChoresByDifficulty chores'' gen
+#+end_src
+
+-fwarn-unused-binds is *very* helpful in catching bugs here, e.g.
+
+#+BEGIN_EXAMPLE
+chorebot-naive.hs:42:6: Warning: Defined but not used: ‘chores'''’
+#+END_EXAMPLE
+
+Most of my bugs were getting the tick marks wrong.
+
+**** Repetitive/brittle type signatures
+
+#+begin_src haskell :tangle no
+distributeAll :: ([Chore], [Assignment], Int) -> [Profile] -> UTCTime -> ([Assignment], Bool)
+#+end_src
+
+Implementing `choreCount` requires all `[Chore]` to be replaced with
+`([Chore], Int)`
+
+We could use type aliases, e.g.
+
+#+begin_src haskell :tangle no
+type DistState = ([Chore], [Assignment], Int)
+distributeAll :: DistState -> [Profile] -> UTCTime -> ([Assignment], Bool)
+#+end_src
+
+**** Refactoring is harder than it should be
+
+Pulling out functions mean passing all of the current algorithm state
+
+#+begin_src haskell :tangle no
+chores' = filter (choreNeedsAssignment pastAssignments' now) chores
+#+end_src
+
+The sanity check limit should really be defined at the top of
+`distribute` and passed to all inner functions. But that was too many
+types for me.
+
+**** Unrelated: record names
+
+Bad idea:
+
+#+begin_src haskell :tangle no
+data Assignment = Assignment { chore :: Chore
+                             , doer  :: Doer
+                             , time  :: UTCTime }
+#+end_src
+
+** Rewriting with Monad Transformers
+:PROPERTIES:
+:tangle: ChorebotMonadTransformer.hs
+:END:
+
+*** Headers
+
+#+begin_src haskell
+{-# language GeneralizedNewtypeDeriving #-}
+{-# language FlexibleContexts #-}
+
+module ChorebotMonadTransformer where
+
+import System.Random
+import Control.Monad.Random
+import Control.Monad.State
+import Control.Monad.Identity
+import Control.Monad.Reader
+import Control.Monad.Extra
+
+import Data.Time
+import Data.List
+
+import ChorebotTypes
+#+end_src
+
+*** Identifying behavior of the algorithm
+
+#+begin_src haskell :tangle no
+sortChoresByDifficulty :: RandomGen g => [Chore] -> g -> ([Chore], g)
+sortProfilesByDifficulty :: RandomGen g => [Profile] -> g -> UTCTime -> ([Profile], g)
+distributePermanent :: ([Chore], [Assignment]) -> [Profile] -> UTCTime -> ([Chore], [Assignment])
+distributeAll :: ([Chore], [Assignment], Int) -> [Profile] -> UTCTime -> ([Assignment], Bool)
+#+end_src
+
+**** State (read/write)
+
+#+begin_src haskell
+data CState = CState
+              { pendingChores :: [Chore]
+              , newAssignments :: [Assignment]
+              , sanityCheck :: Int
+              }
+#+end_src
+
+**** Configuration (read-only)
+
+#+begin_src haskell
+data CConf = CConf { confTime :: UTCTime
+                   , confPastAssignments :: [Assignment]
+                   , confProfiles :: [Profile]
+                   , confSanityCheckLimit :: Int
+                   }
+#+end_src
+
+**** Randomness
+
+#+begin_src haskell :tangle no
+sortChoresByDifficulty :: RandomGen g => [Chore] -> g -> ([Chore], g)
+#+end_src
+
+*** The Chorebot monad
+
+**** Monad transformer composition
+
+#+begin_src haskell
+newtype C a = C { _runC :: RandT StdGen (ReaderT CConf (State CState)) a }
+            deriving (Functor, Applicative, Monad,
+                      MonadState CState,
+                      MonadReader CConf,
+                      MonadRandom)
+#+end_src
+
+**** runC
+
+#+begin_src haskell
+runC :: C a -> CConf -> CState -> StdGen -> ((a, StdGen), CState)
+runC (C k) conf st gen = runIdentity (runStateT (runReaderT (runRandT k gen) conf) st)
+#+end_src
+
+**** reader helpers
+
+#+begin_src haskell
+askTime             :: C UTCTime
+askProfiles         :: C [Profile]
+askPastAssignments  :: C [Assignment]
+askSanityCheckLimit :: C Int
+
+askTime = liftM confTime ask
+askProfiles = liftM confProfiles ask
+askPastAssignments = liftM confPastAssignments ask
+askSanityCheckLimit = liftM confSanityCheckLimit ask
+#+end_src
+
+**** Rewriting "distribute" to use the monad
+
+#+begin_src haskell
+distribute :: [Profile] -> [Chore] -> [Assignment] -> UTCTime -> StdGen -> ([Assignment], Bool, StdGen)
+distribute profiles chores assignments now gen =
+  let (((as, hitSc), gen'), _) = runC distribute' conf st gen
+  in (as, hitSc, gen')
+  where
+    st = CState { pendingChores = chores
+                , newAssignments = []
+                , sanityCheck = 0
+                }
+    conf = CConf now (reverse $ sort assignments) profiles sclimit
+    sclimit = (length chores) * (length profiles) + 50
+#+end_src
+
+*** High level algorithm: distribute'
+
+#+begin_src haskell
+-- The distribution algorithm.
+distribute' :: C ([Assignment], Bool)
+distribute' = do
+  removeUneccessaryChores -- step 1
+  distributePermanent     -- step 2
+  sortChores              -- step 3
+  hitLim <- distributeAll -- step 4
+  st <- get
+  return (newAssignments st, hitLim)
+#+end_src
+
+*** Low level implementation
+
+**** removeUneccessaryChores
+
+#+begin_src haskell
+removeUneccessaryChores :: C ()
+removeUneccessaryChores = do
+  st <- get
+  c' <- filterM choreNeedsAssignment (pendingChores st)
+  put $ st { pendingChores = c' }
+  return ()
+
+-- does a chore need doing?
+choreNeedsAssignment :: Chore -> C Bool
+choreNeedsAssignment c = do
+  now <- askTime
+  past <- askPastAssignments
+  let prevAssignment = find (\a' -> c == (assignmentChore a')) past
+  case prevAssignment of
+    -- a' is the previous assignment of chore c.
+    --
+    -- calculate whether the time since last defined is greater
+    -- than the interval.
+    Just a' -> let diff = diffUTCTime now (assignmentDate a')
+                   secInDay = 24 * 60 * 60
+                   intervalSeconds = fromIntegral $ (7 * choreInterval c) * secInDay
+               in return $ diff >= intervalSeconds
+    Nothing -> return True
+#+end_src
+
+**** distributePermanent
+
+#+begin_src haskell
+distributePermanent :: C ()
+distributePermanent = do
+  profiles <- askProfiles
+
+  forM_ profiles $ \p -> do
+    -- check the current pending chores that are permanently assigned
+    -- to `p`.
+    let doer = profileDoer p
+    cs <- liftM pendingChores get
+    let toAssign = filter (isPermanentlyAssigned doer) cs
+    mapM_ (assignChore p) toAssign
+
+  return ()
+
+assignChore :: Profile -> Chore -> C Assignment
+assignChore prof chore = do
+  st <- get
+  now <- askTime
+  let doer = profileDoer prof
+      assignment = Assignment doer now chore
+      assignments' = assignment : (newAssignments st)
+      chores' = filter (/= chore) (pendingChores st)
+
+  put $ st { pendingChores = chores'
+           , newAssignments = assignments' }
+  return assignment
+#+end_src
+
+**** sortChores
+
+#+begin_src haskell
+-- Sort the pending chores by difficulty, hardest are first. Chores of
+-- equal difficulty are randomly sorted.
+sortChores :: C ()
+sortChores = do
+    st <- get
+    let chores = pendingChores st
+    chores' <- randomishSort chores choreDifficulty
+    put $ st { pendingChores = chores' }
+#+end_src
+
+**** random sorting
+
+#+begin_src haskell
+randomSequence :: Int -> C [Int]
+randomSequence n = sequence $ replicate n $ getRandomR (1,10000)
+
+-- Given a list of a's, and a function Ord b => a -> b that can order
+-- those a's, return an ordered list of as that is randomly ordered
+-- where two a's would be compared equally. We use this to both sort
+-- and "mix up" profiles and chores.
+randomishSort :: Ord b => [a] -> (a -> b) -> C [a]
+randomishSort as fn = do
+    rs <- randomSequence (length as)
+    let asRweighted = zip rs as
+    return $ map snd $ sortBy rsortfn asRweighted
+  where
+    rsortfn (r1, a1) (r2, a2) = case (fn a1) `compare` (fn a2) of
+      EQ -> r1 `compare` r2
+      a -> a
+#+end_src
+
+**** distributeAll
+
+#+begin_src haskell
+distributeAll :: C Bool
+distributeAll = do
+    now <- askTime
+    profiles <- askProfiles
+
+    -- Randomize profiles.
+    sortedProfiles <- randomishSort profiles (difficultyPerDay now)
+
+    lim <- askSanityCheckLimit
+
+    let checkIter :: C Bool
+        checkIter = do
+          st <- get
+          let chores = pendingChores st
+              sc = sanityCheck st
+          if sc > lim || (length chores == 0)
+            then return False
+            else return True
+
+    whileM $ do
+      mapM_ distributeOne sortedProfiles
+      checkIter
+
+    st <- get
+    let hitSanityCheck = if (sanityCheck st) > lim
+                         then True
+                         else False
+
+    return hitSanityCheck
+
+distributeOne :: Profile -> C ()
+distributeOne profile = do
+  lim <- askSanityCheckLimit
+  st <- get
+  let chores = pendingChores st
+      assignments = newAssignments st
+      doer = profileDoer profile
+      sc = sanityCheck st
+      shouldAssign c =
+        or [ sc >= lim, -- force assignment if sanity check is above limit.
+             not $ or [ (hasVetoed doer c),
+                        (elem c $ map assignmentChore (filter ((== doer) . assignmentDoer) assignments)),
+                        (elem c $ latestChores profile)
+                      ]
+           ]
+      -- assign the first chore of `pendingChores' that makes sense to the
+      -- doer.
+      newChoreToAssign = find shouldAssign chores
+
+  case newChoreToAssign of
+    -- we should assign `c` to `profile`
+    Just pending -> assignChore profile pending >> return ()
+
+    -- chore could not be assigned, noop
+    Nothing -> return ()
+
+  incSc -- ensure sanity check counter is increased
+  return ()
+
+incSc :: C ()
+incSc = do
+  st <- get
+  let sc = sanityCheck st
+  put $ st { sanityCheck = sc + 1 }
+#+end_src
+
+** Resources
+
+
+Monad Transformers Step by Step:
+
+https://www.cs.virginia.edu/~wh5a/personal/Transformers.pdf
+
+
+
+Chapter 18: Monad Transformers in Real World Haskell
+
+http://book.realworldhaskell.org/read/monad-transformers.html
+
+
+
+Tony Morris - Monad Transformers
+
+https://vimeo.com/73648150
+
+
+
+Brian Hurt - Wrangling Monad Transformer Stacks
+
+https://www.youtube.com/watch?v=8t8fjkISjus

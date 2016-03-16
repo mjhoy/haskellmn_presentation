@@ -1,0 +1,1266 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<!-- 2016-03-16 Wed 14:05 -->
+<meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta  name="viewport" content="width=device-width, initial-scale=1" />
+<title>building a chorebot monad transformer!</title>
+<meta  name="generator" content="Org-mode" />
+<meta  name="author" content="Michael Hoy &lt;mjh@mjhoy.com&gt;" />
+<style type="text/css">
+ <!--/*--><![CDATA[/*><!--*/
+  .title  { text-align: center;
+             margin-bottom: .2em; }
+  .subtitle { text-align: center;
+              font-size: medium;
+              font-weight: bold;
+              margin-top:0; }
+  .todo   { font-family: monospace; color: red; }
+  .done   { font-family: monospace; color: green; }
+  .priority { font-family: monospace; color: orange; }
+  .tag    { background-color: #eee; font-family: monospace;
+            padding: 2px; font-size: 80%; font-weight: normal; }
+  .timestamp { color: #bebebe; }
+  .timestamp-kwd { color: #5f9ea0; }
+  .org-right  { margin-left: auto; margin-right: 0px;  text-align: right; }
+  .org-left   { margin-left: 0px;  margin-right: auto; text-align: left; }
+  .org-center { margin-left: auto; margin-right: auto; text-align: center; }
+  .underline { text-decoration: underline; }
+  #postamble p, #preamble p { font-size: 90%; margin: .2em; }
+  p.verse { margin-left: 3%; }
+  pre {
+    border: 1px solid #ccc;
+    box-shadow: 3px 3px 3px #eee;
+    padding: 8pt;
+    font-family: monospace;
+    overflow: auto;
+    margin: 1.2em;
+  }
+  pre.src {
+    position: relative;
+    overflow: visible;
+    padding-top: 1.2em;
+  }
+  pre.src:before {
+    display: none;
+    position: absolute;
+    background-color: white;
+    top: -10px;
+    right: 10px;
+    padding: 3px;
+    border: 1px solid black;
+  }
+  pre.src:hover:before { display: inline;}
+  pre.src-sh:before    { content: 'sh'; }
+  pre.src-bash:before  { content: 'sh'; }
+  pre.src-emacs-lisp:before { content: 'Emacs Lisp'; }
+  pre.src-R:before     { content: 'R'; }
+  pre.src-perl:before  { content: 'Perl'; }
+  pre.src-java:before  { content: 'Java'; }
+  pre.src-sql:before   { content: 'SQL'; }
+
+  table { border-collapse:collapse; }
+  caption.t-above { caption-side: top; }
+  caption.t-bottom { caption-side: bottom; }
+  td, th { vertical-align:top;  }
+  th.org-right  { text-align: center;  }
+  th.org-left   { text-align: center;   }
+  th.org-center { text-align: center; }
+  td.org-right  { text-align: right;  }
+  td.org-left   { text-align: left;   }
+  td.org-center { text-align: center; }
+  dt { font-weight: bold; }
+  .footpara { display: inline; }
+  .footdef  { margin-bottom: 1em; }
+  .figure { padding: 1em; }
+  .figure p { text-align: center; }
+  .inlinetask {
+    padding: 10px;
+    border: 2px solid gray;
+    margin: 10px;
+    background: #ffffcc;
+  }
+  #org-div-home-and-up
+   { text-align: right; font-size: 70%; white-space: nowrap; }
+  textarea { overflow-x: auto; }
+  .linenr { font-size: smaller }
+  .code-highlighted { background-color: #ffff00; }
+  .org-info-js_info-navigation { border-style: none; }
+  #org-info-js_console-label
+    { font-size: 10px; font-weight: bold; white-space: nowrap; }
+  .org-info-js_search-highlight
+    { background-color: #ffff00; color: #000000; font-weight: bold; }
+  /*]]>*/-->
+</style>
+
+<script type="text/javascript" src="http://orgmode.org/org-info.js">
+/**
+ *
+ * @source: http://orgmode.org/org-info.js
+ *
+ * @licstart  The following is the entire license notice for the
+ *  JavaScript code in http://orgmode.org/org-info.js.
+ *
+ * Copyright (C) 2012-2013 Free Software Foundation, Inc.
+ *
+ *
+ * The JavaScript code in this tag is free software: you can
+ * redistribute it and/or modify it under the terms of the GNU
+ * General Public License (GNU GPL) as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option)
+ * any later version.  The code is distributed WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+ *
+ * As additional permission under GNU GPL version 3 section 7, you
+ * may distribute non-source (e.g., minimized or compacted) forms of
+ * that code without the copy of the GNU GPL normally required by
+ * section 4, provided you include this license notice and a URL
+ * through which recipients can access the Corresponding Source.
+ *
+ * @licend  The above is the entire license notice
+ * for the JavaScript code in http://orgmode.org/org-info.js.
+ *
+ */
+</script>
+
+<script type="text/javascript">
+
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2013 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+
+<!--/*--><![CDATA[/*><!--*/
+org_html_manager.set("TOC_DEPTH", "3");
+org_html_manager.set("LINK_HOME", "");
+org_html_manager.set("LINK_UP", "");
+org_html_manager.set("LOCAL_TOC", "1");
+org_html_manager.set("VIEW_BUTTONS", "0");
+org_html_manager.set("MOUSE_HINT", "underline");
+org_html_manager.set("FIXED_TOC", "0");
+org_html_manager.set("TOC", "0");
+org_html_manager.set("VIEW", "info");
+org_html_manager.setup();  // activate after the parameters are set
+/*]]>*///-->
+</script>
+<script type="text/javascript">
+/*
+@licstart  The following is the entire license notice for the
+JavaScript code in this tag.
+
+Copyright (C) 2012-2013 Free Software Foundation, Inc.
+
+The JavaScript code in this tag is free software: you can
+redistribute it and/or modify it under the terms of the GNU
+General Public License (GNU GPL) as published by the Free Software
+Foundation, either version 3 of the License, or (at your option)
+any later version.  The code is distributed WITHOUT ANY WARRANTY;
+without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU GPL for more details.
+
+As additional permission under GNU GPL version 3 section 7, you
+may distribute non-source (e.g., minimized or compacted) forms of
+that code without the copy of the GNU GPL normally required by
+section 4, provided you include this license notice and a URL
+through which recipients can access the Corresponding Source.
+
+
+@licend  The above is the entire license notice
+for the JavaScript code in this tag.
+*/
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+</head>
+<body>
+<div id="content">
+<h1 class="title">building a chorebot monad transformer!</h1>
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#orgheadline53">1. presentation</a>
+<ul>
+<li><a href="#orgheadline1">1.1. Who am I?</a></li>
+<li><a href="#orgheadline7">1.2. Motivation: Chorebot</a>
+<ul>
+<li><a href="#orgheadline2">1.2.1. What is it?</a></li>
+<li><a href="#orgheadline3">1.2.2. That's it?</a></li>
+<li><a href="#orgheadline4">1.2.3. The point of this presentation</a></li>
+<li><a href="#orgheadline5">1.2.4. Caveats</a></li>
+<li><a href="#orgheadline6">1.2.5. Github</a></li>
+</ul>
+</li>
+<li><a href="#orgheadline17">1.3. Data types</a>
+<ul>
+<li><a href="#orgheadline8">1.3.1. Header</a></li>
+<li><a href="#orgheadline9">1.3.2. Chores</a></li>
+<li><a href="#orgheadline10">1.3.3. Doers</a></li>
+<li><a href="#orgheadline11">1.3.4. Doer permanent assignments and vetoes</a></li>
+<li><a href="#orgheadline12">1.3.5. Example doer file that gets parsed (not super relevant)</a></li>
+<li><a href="#orgheadline13">1.3.6. Assignments</a></li>
+<li><a href="#orgheadline14">1.3.7. Profiles</a></li>
+<li><a href="#orgheadline15">1.3.8. Profiles: latestChores</a></li>
+<li><a href="#orgheadline16">1.3.9. Profiles: difficultyPerDay</a></li>
+</ul>
+</li>
+<li><a href="#orgheadline33">1.4. First implementation: Naive Haskell algorithm</a>
+<ul>
+<li><a href="#orgheadline18">1.4.1. Header</a></li>
+<li><a href="#orgheadline27">1.4.2. Algorithm</a></li>
+<li><a href="#orgheadline32">1.4.3. Problems</a></li>
+</ul>
+</li>
+<li><a href="#orgheadline51">1.5. Rewriting with Monad Transformers</a>
+<ul>
+<li><a href="#orgheadline34">1.5.1. Headers</a></li>
+<li><a href="#orgheadline38">1.5.2. Identifying behavior of the algorithm</a></li>
+<li><a href="#orgheadline43">1.5.3. The Chorebot monad</a></li>
+<li><a href="#orgheadline44">1.5.4. High level algorithm: distribute'</a></li>
+<li><a href="#orgheadline50">1.5.5. Low level implementation</a></li>
+</ul>
+</li>
+<li><a href="#orgheadline52">1.6. Resources</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgheadline53" class="outline-2">
+<h2 id="orgheadline53"><span class="section-number-2">1</span> presentation</h2>
+<div class="outline-text-2" id="text-1">
+<p>
+The slides/code are available at:
+</p>
+
+<p>
+<a href="https://github.com/mjhoy/haskellmn_presentation">https://github.com/mjhoy/haskellmn_presentation</a>
+</p>
+</div>
+
+<div id="outline-container-orgheadline1" class="outline-3">
+<h3 id="orgheadline1"><span class="section-number-3">1.1</span> Who am I?</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+Michael Hoy
+</p>
+
+<p>
+(but call me Mikey)
+</p>
+
+<p>
+twitter/github -&gt; mjhoy
+</p>
+
+<p>
+mjh@mjhoy.con
+</p>
+
+<p>
+Day job: \.(php|rb|js)
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgheadline7" class="outline-3">
+<h3 id="orgheadline7"><span class="section-number-3">1.2</span> Motivation: Chorebot</h3>
+<div class="outline-text-3" id="text-1-2">
+</div><div id="outline-container-orgheadline2" class="outline-4">
+<h4 id="orgheadline2"><span class="section-number-4">1.2.1</span> What is it?</h4>
+<div class="outline-text-4" id="text-1-2-1">
+<p>
+A program that divvies up chores with my housemates and sends out
+emails.
+</p>
+</div>
+</div>
+
+<div id="outline-container-orgheadline3" class="outline-4">
+<h4 id="orgheadline3"><span class="section-number-4">1.2.2</span> That's it?</h4>
+<div class="outline-text-4" id="text-1-2-2">
+<ul class="org-ul">
+<li>Big house, 8 people, lots of chores</li>
+<li>Hard for humans to redistribute fairly and quickly</li>
+<li>Random BSG quotes to improve morale</li>
+</ul>
+
+
+<div class="figure">
+<p><img src="./cylon.jpg" alt="cylon.jpg" />
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline4" class="outline-4">
+<h4 id="orgheadline4"><span class="section-number-4">1.2.3</span> The point of this presentation</h4>
+<div class="outline-text-4" id="text-1-2-3">
+<ul class="org-ul">
+<li>Wrote Chorebot once in Ruby, again in Haskell, yet again in Haskell
+with Monad Transformers</li>
+
+<li>Why do I care about transformers? How did I include them? What's the
+effect on future refactoring?</li>
+
+<li>Beginner perspective</li>
+</ul>
+
+<div class="org-src-container">
+
+<pre class="src src-text">ba8b123f use monad transformer for the distribute algo
+
+2 files changed, 261 insertions(+), 191 deletions(-)
+chorebot.cabal              |   4 +
+src/Chorebot/Distributor.hs | 448 +++++++++++++++++++++++++-------------------
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline5" class="outline-4">
+<h4 id="orgheadline5"><span class="section-number-4">1.2.4</span> Caveats</h4>
+<div class="outline-text-4" id="text-1-2-4">
+<ul class="org-ul">
+<li>Haskell beginner</li>
+<li>Not optimized (String vs Text, laziness)</li>
+<li>Not going into theory much</li>
+<li>Way too much code! Pay attention to types more than implementation</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgheadline6" class="outline-4">
+<h4 id="orgheadline6"><span class="section-number-4">1.2.5</span> Github</h4>
+<div class="outline-text-4" id="text-1-2-5">
+<p>
+<a href="https://github.com/mjhoy/chorebot_hs">https://github.com/mjhoy/chorebot_hs</a>
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline17" class="outline-3">
+<h3 id="orgheadline17"><span class="section-number-3">1.3</span> Data types</h3>
+<div class="outline-text-3" id="text-1-3">
+</div>
+
+<div id="outline-container-orgheadline8" class="outline-4">
+<h4 id="orgheadline8"><span class="section-number-4">1.3.1</span> Header</h4>
+<div class="outline-text-4" id="text-1-3-1">
+<div class="org-src-container">
+
+<pre class="src src-haskell">module ChorebotTypes where
+
+import Text.Regex (matchRegex, mkRegexWithOpts)
+import Data.Maybe (isJust, fromJust)
+import Data.List
+import Data.Time
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline9" class="outline-4">
+<h4 id="orgheadline9"><span class="section-number-4">1.3.2</span> Chores</h4>
+<div class="outline-text-4" id="text-1-3-2">
+<div class="org-src-container">
+
+<pre class="src src-haskell">data Chore = Chore { choreTitle      :: String
+                   , choreInterval   :: Int
+                   , choreDifficulty :: Int
+                   , choreCount      :: Int
+                   } deriving (Show, Eq)
+
+dishFairy, emptyCompost :: Chore
+dishFairy    = Chore "Dish Fairy" 7 4 1
+emptyCompost = Chore "Empty compost" 7 2 1
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline10" class="outline-4">
+<h4 id="orgheadline10"><span class="section-number-4">1.3.3</span> Doers</h4>
+<div class="outline-text-4" id="text-1-3-3">
+<div class="org-src-container">
+
+<pre class="src src-haskell">type Pattern = String
+
+data Doer = Doer { doerName       :: String
+                 , doerVetoes     :: [Pattern]
+                 , doerPermanents :: [Pattern]
+                 } deriving (Eq, Show)
+
+lee, baltar :: Doer
+baltar = Doer "Gaius Baltar" [] []
+lee    = Doer "Lee Adama"    [] []
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline11" class="outline-4">
+<h4 id="orgheadline11"><span class="section-number-4">1.3.4</span> Doer permanent assignments and vetoes</h4>
+<div class="outline-text-4" id="text-1-3-4">
+<div class="org-src-container">
+
+<pre class="src src-haskell">isPermanentlyAssigned :: Doer -&gt; Chore -&gt; Bool
+isPermanentlyAssigned doer chore =
+  any (matchChore chore) (doerPermanents doer)
+
+hasVetoed :: Doer -&gt; Chore -&gt; Bool
+hasVetoed doer chore =
+  any (matchChore chore) (doerVetoes doer)
+
+matchChore :: Chore -&gt; Pattern -&gt; Bool
+matchChore chore pat =
+  let pat' = mkRegexWithOpts pat True False -- case insensitive
+  in isJust $ matchRegex pat' (choreTitle chore)
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline12" class="outline-4">
+<h4 id="orgheadline12"><span class="section-number-4">1.3.5</span> Example doer file that gets parsed (not super relevant)</h4>
+<div class="outline-text-4" id="text-1-3-5">
+<pre class="example">
+Mikey Hoy &lt;mjh@mjhoy.com&gt;
+Assigned: sweep
+Veto: bathroom, email
+</pre>
+</div>
+</div>
+
+<div id="outline-container-orgheadline13" class="outline-4">
+<h4 id="orgheadline13"><span class="section-number-4">1.3.6</span> Assignments</h4>
+<div class="outline-text-4" id="text-1-3-6">
+<div class="org-src-container">
+
+<pre class="src src-haskell">data Assignment = Assignment { assignmentDoer       :: Doer,
+                               assignmentDate       :: UTCTime,
+                               assignmentChore      :: Chore
+                             } deriving (Show, Eq)
+
+instance Ord Assignment where
+  a1 `compare` a2 =
+    (assignmentDate a1) `compare` (assignmentDate a2)
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline14" class="outline-4">
+<h4 id="orgheadline14"><span class="section-number-4">1.3.7</span> Profiles</h4>
+<div class="outline-text-4" id="text-1-3-7">
+<p>
+Think of as doer plus history of doing chores
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-haskell">data Profile = Profile { profileDoer        :: Doer
+                       , profileAssignments :: [Assignment]
+                       } deriving (Eq, Show)
+
+buildProfile :: [Assignment] -&gt; -- List of all/any chore assignments
+                Doer -&gt;
+                Profile
+buildProfile assignments doer = Profile doer assignments''
+  where
+    assignments'' = sort assignments'
+    assignments' = filter byDoer assignments
+    byDoer a = (assignmentDoer a) == doer
+
+parseDate :: String -&gt; UTCTime
+parseDate t = fromJust $ parseTimeM True defaultTimeLocale "%Y/%m/%d" t
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline15" class="outline-4">
+<h4 id="orgheadline15"><span class="section-number-4">1.3.8</span> Profiles: latestChores</h4>
+<div class="outline-text-4" id="text-1-3-8">
+<div class="org-src-container">
+
+<pre class="src src-haskell">-- Find the chores with the most recent date
+latestChores :: Profile -&gt; [Chore]
+latestChores (Profile _d []) = []
+latestChores (Profile _d as@(a:_)) =
+    let latest = foldl' lateDate (assignmentDate a) as
+    in map assignmentChore $ filter (\a' -&gt; (assignmentDate a') == latest) as
+  where
+    lateDate :: UTCTime -&gt; Assignment -&gt; UTCTime
+    lateDate t a' = let t' = assignmentDate a'
+                    in if t' &gt; t then t' else t
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline16" class="outline-4">
+<h4 id="orgheadline16"><span class="section-number-4">1.3.9</span> Profiles: difficultyPerDay</h4>
+<div class="outline-text-4" id="text-1-3-9">
+<div class="org-src-container">
+
+<pre class="src src-haskell">difficultyPerDay :: UTCTime -&gt;  -- the current time
+                    Profile -&gt;
+                    Double
+difficultyPerDay now (Profile _ assignments) =
+  -- get the earliest date in `as'
+    let earliest  = foldl' earlyDate now assignments
+        diffTime  = max secInDay $ round $ diffUTCTime now earliest
+        secInDay = 24 * 60 * 60
+        daysSince :: Double
+        daysSince = fromIntegral diffTime / fromIntegral secInDay
+        totalDifficulty = foldl' (\d a -&gt; d + (choreDifficulty $ assignmentChore a)) 0 assignments
+    in fromIntegral totalDifficulty / daysSince
+  where
+    earlyDate :: UTCTime -&gt; Assignment -&gt; UTCTime
+    earlyDate t a = let t' = assignmentDate a
+                    in if t' &lt; t then t' else t
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline33" class="outline-3">
+<h3 id="orgheadline33"><span class="section-number-3">1.4</span> First implementation: Naive Haskell algorithm</h3>
+<div class="outline-text-3" id="text-1-4">
+<ul class="org-ul">
+<li>the "distribute" function will output new chore assignments</li>
+</ul>
+</div>
+
+<div id="outline-container-orgheadline18" class="outline-4">
+<h4 id="orgheadline18"><span class="section-number-4">1.4.1</span> Header</h4>
+<div class="outline-text-4" id="text-1-4-1">
+<p>
+Up front:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-haskell">module ChorebotNaive where
+
+import Data.List
+import Data.Time
+import System.Random
+import ChorebotTypes
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline27" class="outline-4">
+<h4 id="orgheadline27"><span class="section-number-4">1.4.2</span> Algorithm</h4>
+<div class="outline-text-4" id="text-1-4-2">
+</div><ol class="org-ol"><li><a id="orgheadline19"></a>High level: distribute's type<br  /><div class="outline-text-5" id="text-1-4-2-1">
+<div class="org-src-container">
+
+<pre class="src src-haskell">distribute :: RandomGen g =&gt;
+
+              -- list of profiles to assign chores to
+              [Profile] -&gt;
+
+              -- list of possible chores to assign
+              [Chore] -&gt;
+
+              -- list of past chore assignments
+              [Assignment] -&gt;
+
+              -- current time
+              UTCTime -&gt;
+
+              -- random number generator
+              g -&gt;
+
+              -- a list of new assignments plus whether any chores
+              -- were force assigned, plus a new random gen
+              ([Assignment], Bool, g)
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline20"></a>High level: distribute's implementation<br  /><div class="outline-text-5" id="text-1-4-2-2">
+<div class="org-src-container">
+
+<pre class="src src-haskell">distribute profiles chores pastAssignments now gen = (finalAssignments, didForceAssign, finalGen)
+  where
+    -- past assignments sorted most recent first
+    pastAssignments' = reverse $ sort pastAssignments
+
+    -- step 1: remove chores assigned previously within their interval
+    chores' = filter (choreNeedsAssignment pastAssignments' now) chores
+
+    -- step 2: distribute permanent chores
+    (chores'', newAssignments) = distributePermanent (chores',[]) profiles now
+
+    -- step 3: sort chores by difficulty, hardest first
+    (chores''', gen') = sortChoresByDifficulty chores'' gen
+
+    -- step 4: sort profiles in order of least "difficultyPerDay" first
+    (profiles', gen'') = sortProfilesByDifficulty profiles gen' now
+
+    -- step 5: distribute the rest of the chores
+    (newAssignments', didForceAssign) = distributeAll (chores''', newAssignments, 0) profiles' now
+
+    finalAssignments = newAssignments'
+    finalGen = gen''
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline26"></a>Low level implementation<br  /><ol class="org-ol"><li><a id="orgheadline21"></a>choreNeedsAssignment<br  /><div class="outline-text-6" id="text-1-4-2-3-1">
+<div class="org-src-container">
+
+<pre class="src src-haskell">-- does a chore need doing?
+choreNeedsAssignment :: [Assignment] -&gt; UTCTime -&gt; Chore -&gt; Bool
+choreNeedsAssignment pastAssignments now c =
+  let prevAssignment = find (\a' -&gt; c == (assignmentChore a')) pastAssignments
+  in case prevAssignment of
+
+    -- a' is the previous assignment of chore c.
+    --
+    -- calculate whether the time since last defined is greater
+    -- than the interval.
+    Just a' -&gt; let diff = diffUTCTime now (assignmentDate a')
+                   secInDay = 24 * 60 * 60
+                   intervalSeconds = fromIntegral $ (choreInterval c) * secInDay
+               in diff &gt;= intervalSeconds
+
+    -- chore c has never been assigned before, so we should
+    -- definitely assign it.
+    Nothing -&gt; True
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline22"></a>distributePermanent<br  /><div class="outline-text-6" id="text-1-4-2-3-2">
+<div class="org-src-container">
+
+<pre class="src src-haskell">-- assign all permanent chores
+distributePermanent :: ([Chore], [Assignment]) -&gt; [Profile] -&gt; UTCTime -&gt; ([Chore], [Assignment])
+distributePermanent (chores, assignments) profiles now = (chores', assignments')
+  where
+    (chores', assignments') =
+      foldl' assignPermForDoer (chores, assignments) (map profileDoer profiles)
+
+    assignPermForDoer ([], as) _doer = ([], as)
+    assignPermForDoer (cs, as) doer  =  (cs \\ assignedChores,
+                                         as ++ (map (Assignment doer now) assignedChores))
+      where
+        assignedChores = filter (isPermanentlyAssigned doer) cs
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline23"></a>sortChoresByDifficulty<br  /><div class="outline-text-6" id="text-1-4-2-3-3">
+<div class="org-src-container">
+
+<pre class="src src-haskell">randomNRs :: RandomGen g =&gt; Int -&gt; g -&gt; ([Int], g)
+randomNRs n g = foldl' fn ([], g) (take n $ repeat ())
+  where fn (acc,g') _ = let (a, g'') = randomR (1,10000) g'
+                        in (a:acc, g'')
+
+-- most difficult chores first; randomize chores with equal
+-- difficulties
+sortChoresByDifficulty :: RandomGen g =&gt; [Chore] -&gt; g -&gt; ([Chore], g)
+sortChoresByDifficulty chores gen =
+  let (rs, gen') = randomNRs (length chores) gen
+      cRandomWeight = zip rs chores
+      sortFn :: (Int, Chore) -&gt; (Int, Chore) -&gt; Ordering
+      sortFn (r1, c1) (r2, c2) = case choreDifficulty c1 `compare` choreDifficulty c2 of
+        EQ -&gt; r1 `compare` r2
+        a  -&gt; a
+  in ((map snd $ reverse $ sortBy sortFn cRandomWeight), gen')
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline24"></a>sortProfilesByDifficulty<br  /><div class="outline-text-6" id="text-1-4-2-3-4">
+<div class="org-src-container">
+
+<pre class="src src-haskell">-- profiles with the least "difficultyPerDay" first; randomize when
+-- equal.
+sortProfilesByDifficulty :: RandomGen g =&gt; [Profile] -&gt; g -&gt; UTCTime -&gt; ([Profile], g)
+sortProfilesByDifficulty profiles gen now =
+  let (rs, gen') = randomNRs (length profiles) gen
+      pRandomWeight = zip rs profiles
+      sortFn :: (Int, Profile) -&gt; (Int, Profile) -&gt; Ordering
+      sortFn (r1, p1) (r2, p2) = case difficultyPerDay now p1 `compare` difficultyPerDay now p2 of
+        EQ -&gt; r1 `compare` r2
+        a -&gt; a
+  in ((map snd $ sortBy sortFn pRandomWeight), gen')
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline25"></a>distributeAll<br  /><div class="outline-text-6" id="text-1-4-2-3-5">
+<div class="org-src-container">
+
+<pre class="src src-haskell">hitSCLim :: [Profile] -&gt; Int -&gt; Bool
+hitSCLim profiles sc = sc &gt;= (length profiles * 50)
+
+-- distribute all remaining chores
+distributeAll :: ([Chore], [Assignment], Int) -&gt; [Profile] -&gt; UTCTime -&gt; ([Assignment], Bool)
+
+-- no more pending chores: return assignments.
+distributeAll ([], acc, sc) profiles _now = (acc, hitSCLim profiles sc)
+
+-- otherwise
+distributeAll (chores, acc, sc) profiles now = distributeAll (chores', acc', sc') profiles now
+  where
+    overLimit = hitSCLim profiles sc'
+    (chores', acc', sc') = foldl' (mkAssignment overLimit now) (chores, acc, sc) profiles
+
+mkAssignment ::
+  -- went over sc limit; if so, "force assign"
+  Bool -&gt;
+
+  -- current time
+  UTCTime -&gt;
+
+  -- state
+  ([Chore], [Assignment], Int) -&gt;
+
+  -- profile to assign to
+  Profile -&gt;
+
+  -- new state
+  ([Chore], [Assignment], Int)
+
+mkAssignment overLimit now (c, a, s) profile =
+    mkAssignment' (c, a, s) []
+  where
+    mkAssignment' :: ([Chore], [Assignment], Int) -&gt; [Chore] -&gt; ([Chore], [Assignment], Int)
+    mkAssignment' ([], assignments, sc) acc = (acc, assignments, sc + 1)
+    mkAssignment' (chore:cs, assignments, sc) acc =
+      let doer = profileDoer profile
+          newAssignment = Assignment doer now chore
+
+          -- should we make this assignment?
+          shouldAssign = or [
+            overLimit,
+            (and [(not $ hasVetoed doer chore),
+                  (not $ elem chore $ map assignmentChore $ filter ((== doer) . assignmentDoer) assignments),
+                  (not $ elem chore $ latestChores profile)])
+            ]
+      in if shouldAssign
+         then (acc ++ cs, newAssignment:assignments, sc + 1)
+         else mkAssignment' (cs, assignments, sc) (chore:acc)
+</pre>
+</div>
+</div></li></ol></li></ol>
+</div>
+
+
+<div id="outline-container-orgheadline32" class="outline-4">
+<h4 id="orgheadline32"><span class="section-number-4">1.4.3</span> Problems</h4>
+<div class="outline-text-4" id="text-1-4-3">
+</div><ol class="org-ol"><li><a id="orgheadline28"></a>Lots of manual handling of state<br  /><div class="outline-text-5" id="text-1-4-3-1">
+<div class="org-src-container">
+
+<pre class="src src-haskell">(chores''', gen') = sortChoresByDifficulty chores'' gen
+</pre>
+</div>
+
+<p>
+-fwarn-unused-binds is <b>very</b> helpful in catching bugs here, e.g.
+</p>
+
+<pre class="example">
+chorebot-naive.hs:42:6: Warning: Defined but not used: ‘chores'''’
+</pre>
+
+<p>
+Most of my bugs were getting the tick marks wrong.
+</p>
+</div></li>
+
+<li><a id="orgheadline29"></a>Repetitive/brittle type signatures<br  /><div class="outline-text-5" id="text-1-4-3-2">
+<div class="org-src-container">
+
+<pre class="src src-haskell">distributeAll :: ([Chore], [Assignment], Int) -&gt; [Profile] -&gt; UTCTime -&gt; ([Assignment], Bool)
+</pre>
+</div>
+
+<p>
+Implementing `choreCount` requires all `[Chore]` to be replaced with
+`([Chore], Int)`
+</p>
+
+<p>
+We could use type aliases, e.g.
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-haskell">type DistState = ([Chore], [Assignment], Int)
+distributeAll :: DistState -&gt; [Profile] -&gt; UTCTime -&gt; ([Assignment], Bool)
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline30"></a>Refactoring is harder than it should be<br  /><div class="outline-text-5" id="text-1-4-3-3">
+<p>
+Pulling out functions mean passing all of the current algorithm state
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-haskell">chores' = filter (choreNeedsAssignment pastAssignments' now) chores
+</pre>
+</div>
+
+<p>
+The sanity check limit should really be defined at the top of
+`distribute` and passed to all inner functions. But that was too many
+types for me.
+</p>
+</div></li>
+
+<li><a id="orgheadline31"></a>Unrelated: record names<br  /><div class="outline-text-5" id="text-1-4-3-4">
+<p>
+Bad idea:
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-haskell">data Assignment = Assignment { chore :: Chore
+                             , doer  :: Doer
+                             , time  :: UTCTime }
+</pre>
+</div>
+</div></li></ol>
+</div>
+</div>
+
+<div id="outline-container-orgheadline51" class="outline-3">
+<h3 id="orgheadline51"><span class="section-number-3">1.5</span> Rewriting with Monad Transformers</h3>
+<div class="outline-text-3" id="text-1-5">
+</div>
+
+<div id="outline-container-orgheadline34" class="outline-4">
+<h4 id="orgheadline34"><span class="section-number-4">1.5.1</span> Headers</h4>
+<div class="outline-text-4" id="text-1-5-1">
+<div class="org-src-container">
+
+<pre class="src src-haskell">{-# language GeneralizedNewtypeDeriving #-}
+{-# language FlexibleContexts #-}
+
+module ChorebotMonadTransformer where
+
+import System.Random
+import Control.Monad.Random
+import Control.Monad.State
+import Control.Monad.Identity
+import Control.Monad.Reader
+import Control.Monad.Extra
+
+import Data.Time
+import Data.List
+
+import ChorebotTypes
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline38" class="outline-4">
+<h4 id="orgheadline38"><span class="section-number-4">1.5.2</span> Identifying behavior of the algorithm</h4>
+<div class="outline-text-4" id="text-1-5-2">
+<div class="org-src-container">
+
+<pre class="src src-haskell">sortChoresByDifficulty :: RandomGen g =&gt; [Chore] -&gt; g -&gt; ([Chore], g)
+sortProfilesByDifficulty :: RandomGen g =&gt; [Profile] -&gt; g -&gt; UTCTime -&gt; ([Profile], g)
+distributePermanent :: ([Chore], [Assignment]) -&gt; [Profile] -&gt; UTCTime -&gt; ([Chore], [Assignment])
+distributeAll :: ([Chore], [Assignment], Int) -&gt; [Profile] -&gt; UTCTime -&gt; ([Assignment], Bool)
+</pre>
+</div>
+</div>
+
+<ol class="org-ol"><li><a id="orgheadline35"></a>State (read/write)<br  /><div class="outline-text-5" id="text-1-5-2-1">
+<div class="org-src-container">
+
+<pre class="src src-haskell">data CState = CState
+              { pendingChores :: [Chore]
+              , newAssignments :: [Assignment]
+              , sanityCheck :: Int
+              }
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline36"></a>Configuration (read-only)<br  /><div class="outline-text-5" id="text-1-5-2-2">
+<div class="org-src-container">
+
+<pre class="src src-haskell">data CConf = CConf { confTime :: UTCTime
+                   , confPastAssignments :: [Assignment]
+                   , confProfiles :: [Profile]
+                   , confSanityCheckLimit :: Int
+                   }
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline37"></a>Randomness<br  /><div class="outline-text-5" id="text-1-5-2-3">
+<div class="org-src-container">
+
+<pre class="src src-haskell">sortChoresByDifficulty :: RandomGen g =&gt; [Chore] -&gt; g -&gt; ([Chore], g)
+</pre>
+</div>
+</div></li></ol>
+</div>
+
+<div id="outline-container-orgheadline43" class="outline-4">
+<h4 id="orgheadline43"><span class="section-number-4">1.5.3</span> The Chorebot monad</h4>
+<div class="outline-text-4" id="text-1-5-3">
+</div><ol class="org-ol"><li><a id="orgheadline39"></a>Monad transformer composition<br  /><div class="outline-text-5" id="text-1-5-3-1">
+<div class="org-src-container">
+
+<pre class="src src-haskell">newtype C a = C { _runC :: RandT StdGen (ReaderT CConf (State CState)) a }
+            deriving (Functor, Applicative, Monad,
+                      MonadState CState,
+                      MonadReader CConf,
+                      MonadRandom)
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline40"></a>runC<br  /><div class="outline-text-5" id="text-1-5-3-2">
+<div class="org-src-container">
+
+<pre class="src src-haskell">runC :: C a -&gt; CConf -&gt; CState -&gt; StdGen -&gt; ((a, StdGen), CState)
+runC (C k) conf st gen = runIdentity (runStateT (runReaderT (runRandT k gen) conf) st)
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline41"></a>reader helpers<br  /><div class="outline-text-5" id="text-1-5-3-3">
+<div class="org-src-container">
+
+<pre class="src src-haskell">askTime             :: C UTCTime
+askProfiles         :: C [Profile]
+askPastAssignments  :: C [Assignment]
+askSanityCheckLimit :: C Int
+
+askTime = liftM confTime ask
+askProfiles = liftM confProfiles ask
+askPastAssignments = liftM confPastAssignments ask
+askSanityCheckLimit = liftM confSanityCheckLimit ask
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline42"></a>Rewriting "distribute" to use the monad<br  /><div class="outline-text-5" id="text-1-5-3-4">
+<div class="org-src-container">
+
+<pre class="src src-haskell">distribute :: [Profile] -&gt; [Chore] -&gt; [Assignment] -&gt; UTCTime -&gt; StdGen -&gt; ([Assignment], Bool, StdGen)
+distribute profiles chores assignments now gen =
+  let (((as, hitSc), gen'), _) = runC distribute' conf st gen
+  in (as, hitSc, gen')
+  where
+    st = CState { pendingChores = chores
+                , newAssignments = []
+                , sanityCheck = 0
+                }
+    conf = CConf now (reverse $ sort assignments) profiles sclimit
+    sclimit = (length chores) * (length profiles) + 50
+</pre>
+</div>
+</div></li></ol>
+</div>
+
+<div id="outline-container-orgheadline44" class="outline-4">
+<h4 id="orgheadline44"><span class="section-number-4">1.5.4</span> High level algorithm: distribute'</h4>
+<div class="outline-text-4" id="text-1-5-4">
+<div class="org-src-container">
+
+<pre class="src src-haskell">-- The distribution algorithm.
+distribute' :: C ([Assignment], Bool)
+distribute' = do
+  removeUneccessaryChores -- step 1
+  distributePermanent     -- step 2
+  sortChores              -- step 3
+  hitLim &lt;- distributeAll -- step 4
+  st &lt;- get
+  return (newAssignments st, hitLim)
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgheadline50" class="outline-4">
+<h4 id="orgheadline50"><span class="section-number-4">1.5.5</span> Low level implementation</h4>
+<div class="outline-text-4" id="text-1-5-5">
+</div><ol class="org-ol"><li><a id="orgheadline45"></a>removeUneccessaryChores<br  /><div class="outline-text-5" id="text-1-5-5-1">
+<div class="org-src-container">
+
+<pre class="src src-haskell">removeUneccessaryChores :: C ()
+removeUneccessaryChores = do
+  st &lt;- get
+  c' &lt;- filterM choreNeedsAssignment (pendingChores st)
+  put $ st { pendingChores = c' }
+  return ()
+
+-- does a chore need doing?
+choreNeedsAssignment :: Chore -&gt; C Bool
+choreNeedsAssignment c = do
+  now &lt;- askTime
+  past &lt;- askPastAssignments
+  let prevAssignment = find (\a' -&gt; c == (assignmentChore a')) past
+  case prevAssignment of
+    -- a' is the previous assignment of chore c.
+    --
+    -- calculate whether the time since last defined is greater
+    -- than the interval.
+    Just a' -&gt; let diff = diffUTCTime now (assignmentDate a')
+                   secInDay = 24 * 60 * 60
+                   intervalSeconds = fromIntegral $ (7 * choreInterval c) * secInDay
+               in return $ diff &gt;= intervalSeconds
+    Nothing -&gt; return True
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline46"></a>distributePermanent<br  /><div class="outline-text-5" id="text-1-5-5-2">
+<div class="org-src-container">
+
+<pre class="src src-haskell">distributePermanent :: C ()
+distributePermanent = do
+  profiles &lt;- askProfiles
+
+  forM_ profiles $ \p -&gt; do
+    -- check the current pending chores that are permanently assigned
+    -- to `p`.
+    let doer = profileDoer p
+    cs &lt;- liftM pendingChores get
+    let toAssign = filter (isPermanentlyAssigned doer) cs
+    mapM_ (assignChore p) toAssign
+
+  return ()
+
+assignChore :: Profile -&gt; Chore -&gt; C Assignment
+assignChore prof chore = do
+  st &lt;- get
+  now &lt;- askTime
+  let doer = profileDoer prof
+      assignment = Assignment doer now chore
+      assignments' = assignment : (newAssignments st)
+      chores' = filter (/= chore) (pendingChores st)
+
+  put $ st { pendingChores = chores'
+           , newAssignments = assignments' }
+  return assignment
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline47"></a>sortChores<br  /><div class="outline-text-5" id="text-1-5-5-3">
+<div class="org-src-container">
+
+<pre class="src src-haskell">-- Sort the pending chores by difficulty, hardest are first. Chores of
+-- equal difficulty are randomly sorted.
+sortChores :: C ()
+sortChores = do
+    st &lt;- get
+    let chores = pendingChores st
+    chores' &lt;- randomishSort chores choreDifficulty
+    put $ st { pendingChores = chores' }
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline48"></a>random sorting<br  /><div class="outline-text-5" id="text-1-5-5-4">
+<div class="org-src-container">
+
+<pre class="src src-haskell">randomSequence :: Int -&gt; C [Int]
+randomSequence n = sequence $ replicate n $ getRandomR (1,10000)
+
+-- Given a list of a's, and a function Ord b =&gt; a -&gt; b that can order
+-- those a's, return an ordered list of as that is randomly ordered
+-- where two a's would be compared equally. We use this to both sort
+-- and "mix up" profiles and chores.
+randomishSort :: Ord b =&gt; [a] -&gt; (a -&gt; b) -&gt; C [a]
+randomishSort as fn = do
+    rs &lt;- randomSequence (length as)
+    let asRweighted = zip rs as
+    return $ map snd $ sortBy rsortfn asRweighted
+  where
+    rsortfn (r1, a1) (r2, a2) = case (fn a1) `compare` (fn a2) of
+      EQ -&gt; r1 `compare` r2
+      a -&gt; a
+</pre>
+</div>
+</div></li>
+
+<li><a id="orgheadline49"></a>distributeAll<br  /><div class="outline-text-5" id="text-1-5-5-5">
+<div class="org-src-container">
+
+<pre class="src src-haskell">distributeAll :: C Bool
+distributeAll = do
+    now &lt;- askTime
+    profiles &lt;- askProfiles
+
+    -- Randomize profiles.
+    sortedProfiles &lt;- randomishSort profiles (difficultyPerDay now)
+
+    lim &lt;- askSanityCheckLimit
+
+    let checkIter :: C Bool
+        checkIter = do
+          st &lt;- get
+          let chores = pendingChores st
+              sc = sanityCheck st
+          if sc &gt; lim || (length chores == 0)
+            then return False
+            else return True
+
+    whileM $ do
+      mapM_ distributeOne sortedProfiles
+      checkIter
+
+    st &lt;- get
+    let hitSanityCheck = if (sanityCheck st) &gt; lim
+                         then True
+                         else False
+
+    return hitSanityCheck
+
+distributeOne :: Profile -&gt; C ()
+distributeOne profile = do
+  lim &lt;- askSanityCheckLimit
+  st &lt;- get
+  let chores = pendingChores st
+      assignments = newAssignments st
+      doer = profileDoer profile
+      sc = sanityCheck st
+      shouldAssign c =
+        or [ sc &gt;= lim, -- force assignment if sanity check is above limit.
+             not $ or [ (hasVetoed doer c),
+                        (elem c $ map assignmentChore (filter ((== doer) . assignmentDoer) assignments)),
+                        (elem c $ latestChores profile)
+                      ]
+           ]
+      -- assign the first chore of `pendingChores' that makes sense to the
+      -- doer.
+      newChoreToAssign = find shouldAssign chores
+
+  case newChoreToAssign of
+    -- we should assign `c` to `profile`
+    Just pending -&gt; assignChore profile pending &gt;&gt; return ()
+
+    -- chore could not be assigned, noop
+    Nothing -&gt; return ()
+
+  incSc -- ensure sanity check counter is increased
+  return ()
+
+incSc :: C ()
+incSc = do
+  st &lt;- get
+  let sc = sanityCheck st
+  put $ st { sanityCheck = sc + 1 }
+</pre>
+</div>
+</div></li></ol>
+</div>
+</div>
+
+<div id="outline-container-orgheadline52" class="outline-3">
+<h3 id="orgheadline52"><span class="section-number-3">1.6</span> Resources</h3>
+<div class="outline-text-3" id="text-1-6">
+<p>
+Monad Transformers Step by Step:
+</p>
+
+<p>
+<a href="https://www.cs.virginia.edu/~wh5a/personal/Transformers.pdf">https://www.cs.virginia.edu/~wh5a/personal/Transformers.pdf</a>
+</p>
+
+
+
+<p>
+Chapter 18: Monad Transformers in Real World Haskell
+</p>
+
+<p>
+<a href="http://book.realworldhaskell.org/read/monad-transformers.html">http://book.realworldhaskell.org/read/monad-transformers.html</a>
+</p>
+
+
+
+<p>
+Tony Morris - Monad Transformers
+</p>
+
+<p>
+<a href="https://vimeo.com/73648150">https://vimeo.com/73648150</a>
+</p>
+
+
+
+<p>
+Brian Hurt - Wrangling Monad Transformer Stacks
+</p>
+
+<p>
+<a href="https://www.youtube.com/watch?v=8t8fjkISjus">https://www.youtube.com/watch?v=8t8fjkISjus</a>
+</p>
+</div>
+</div>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="author">Author: Michael Hoy &lt;mjh@mjhoy.com&gt;</p>
+<p class="date">Created: 2016-03-16 Wed 14:05</p>
+<p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
