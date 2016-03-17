@@ -707,7 +707,7 @@ sortChores = do
 **** random sorting
 
 #+begin_src haskell
-randomSequence :: Int -> C [Int]
+randomSequence :: MonadRandom m => Int -> m [Int]
 randomSequence n = sequence $ replicate n $ getRandomR (1,10000)
 
 -- Given a list of a's, and a function Ord b => a -> b that can order
@@ -813,6 +813,8 @@ testDistribute = do
 
 - Efficiency (Text, strictness, etc)
 
+- Type level nats
+
 - Generalized types
 
 - Handle errors (i.e. running over sanity check) with ExceptT
@@ -822,7 +824,9 @@ testDistribute = do
 - Improve the actual algorithm: multiple (parallel?) iterations, score
   fairness and pick best
 
-- use ReaderT's 'local' (for instance when sorting profiles for one
+- Randomize totally and pick best
+
+- use ReaderT's 'local' (for instoance when sorting profiles for one
   part of the algorithm)
 
 ** Resources

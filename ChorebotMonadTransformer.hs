@@ -124,7 +124,7 @@ sortChores = do
     chores' <- randomishSort chores choreDifficulty
     put $ st { pendingChores = chores' }
 
-randomSequence :: Int -> C [Int]
+randomSequence :: MonadRandom m => Int -> m [Int]
 randomSequence n = sequence $ replicate n $ getRandomR (1,10000)
 
 -- Given a list of a's, and a function Ord b => a -> b that can order
