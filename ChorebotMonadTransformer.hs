@@ -27,16 +27,12 @@ data CConf = CConf { confTime :: UTCTime
                    , confSanityCheckLimit :: Int
                    }
 
-newtype C a = C { _runC :: RandT StdGen (ReaderT CConf (State CState)) a }
-            deriving (Functor, Applicative, Monad,
-                      MonadState CState,
-                      MonadReader CConf,
-                      MonadRandom)
+type C a = RandT StdGen (ReaderT CConf (State CState)) a
 
 runC :: C a -> CConf -> CState -> StdGen -> ((a, StdGen), CState)
-runC (C k) conf st gen = runIdentity (runStateT (runReaderT (runRandT k gen) conf) st)
+runC k conf st gen = runIdentity (runStateT (runReaderT (runRandT k gen) conf) st)
 
-askTime             :: C UTCTime
+askTime             :: MonadReader CConf m => m UTCTime
 askProfiles         :: C [Profile]
 askPastAssignments  :: C [Assignment]
 askSanityCheckLimit :: C Int
