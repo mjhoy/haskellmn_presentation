@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2016-03-16 Wed 18:57 -->
+<!-- 2016-03-16 Wed 21:11 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="viewport" content="width=device-width, initial-scale=1" />
 <title>building a chorebot monad transformer!</title>
@@ -1011,11 +1011,7 @@ distributeAll :: ([Chore], [Assignment], Int) -&gt; [Profile] -&gt; UTCTime -&gt
 </div><ol class="org-ol"><li><a id="orgheadline40"></a>Monad transformer composition<br  /><div class="outline-text-5" id="text-1-5-3-1">
 <div class="org-src-container">
 
-<pre class="src src-haskell">newtype C a = C { _runC :: RandT StdGen (ReaderT CConf (State CState)) a }
-            deriving (Functor, Applicative, Monad,
-                      MonadState CState,
-                      MonadReader CConf,
-                      MonadRandom)
+<pre class="src src-haskell">type C a = RandT StdGen (ReaderT CConf (State CState)) a
 </pre>
 </div>
 </div></li>
@@ -1024,7 +1020,7 @@ distributeAll :: ([Chore], [Assignment], Int) -&gt; [Profile] -&gt; UTCTime -&gt
 <div class="org-src-container">
 
 <pre class="src src-haskell">runC :: C a -&gt; CConf -&gt; CState -&gt; StdGen -&gt; ((a, StdGen), CState)
-runC (C k) conf st gen = runIdentity (runStateT (runReaderT (runRandT k gen) conf) st)
+runC k conf st gen = runIdentity (runStateT (runReaderT (runRandT k gen) conf) st)
 </pre>
 </div>
 </div></li>
@@ -1032,7 +1028,7 @@ runC (C k) conf st gen = runIdentity (runStateT (runReaderT (runRandT k gen) con
 <li><a id="orgheadline42"></a>reader helpers<br  /><div class="outline-text-5" id="text-1-5-3-3">
 <div class="org-src-container">
 
-<pre class="src src-haskell">askTime             :: C UTCTime
+<pre class="src src-haskell">askTime             :: MonadReader CConf m =&gt; m UTCTime
 askProfiles         :: C [Profile]
 askPastAssignments  :: C [Assignment]
 askSanityCheckLimit :: C Int
@@ -1167,7 +1163,7 @@ sortChores = do
 <li><a id="orgheadline49"></a>random sorting<br  /><div class="outline-text-5" id="text-1-5-5-4">
 <div class="org-src-container">
 
-<pre class="src src-haskell">randomSequence :: Int -&gt; C [Int]
+<pre class="src src-haskell">randomSequence :: MonadRandom m =&gt; Int -&gt; m [Int]
 randomSequence n = sequence $ replicate n $ getRandomR (1,10000)
 
 -- Given a list of a's, and a function Ord b =&gt; a -&gt; b that can order
@@ -1285,6 +1281,8 @@ testDistribute = do
 <ul class="org-ul">
 <li>Efficiency (Text, strictness, etc)</li>
 
+<li>Type level nats</li>
+
 <li>Generalized types</li>
 
 <li>Handle errors (i.e. running over sanity check) with ExceptT</li>
@@ -1294,7 +1292,9 @@ testDistribute = do
 <li>Improve the actual algorithm: multiple (parallel?) iterations, score
 fairness and pick best</li>
 
-<li>use ReaderT's 'local' (for instance when sorting profiles for one
+<li>Randomize totally and pick best</li>
+
+<li>use ReaderT's 'local' (for instoance when sorting profiles for one
 part of the algorithm)</li>
 </ul>
 </div>
@@ -1346,7 +1346,7 @@ Brian Hurt - Wrangling Monad Transformer Stacks
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Michael Hoy &lt;mjh@mjhoy.com&gt;</p>
-<p class="date">Created: 2016-03-16 Wed 18:57</p>
+<p class="date">Created: 2016-03-16 Wed 21:11</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>
